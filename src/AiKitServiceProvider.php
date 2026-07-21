@@ -6,12 +6,20 @@ namespace SolutionForest\AiKit;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use SolutionForest\AiKit\Mcp\AiKitServer;
 use SolutionForest\AiKit\Chunking\RecursiveTextChunker;
+use SolutionForest\AiKit\Console\ChatCommand;
+use SolutionForest\AiKit\Console\CollectionCommand;
+use SolutionForest\AiKit\Console\ConversationCommand;
 use SolutionForest\AiKit\Console\DemoCommand;
+use SolutionForest\AiKit\Console\DocumentCommand;
 use SolutionForest\AiKit\Console\IngestCommand;
 use SolutionForest\AiKit\Console\IngestUrlCommand;
 use SolutionForest\AiKit\Console\InstallCommand;
+use SolutionForest\AiKit\Console\SearchCommand;
+use SolutionForest\AiKit\Console\StatsCommand;
 use SolutionForest\AiKit\Contracts\Chunker;
 use SolutionForest\AiKit\Contracts\Embedder;
 use SolutionForest\AiKit\Contracts\Retriever;
@@ -73,11 +81,55 @@ final class AiKitServiceProvider extends ServiceProvider
                 IngestCommand::class,
                 IngestUrlCommand::class,
                 DemoCommand::class,
+                // Headless parity with the Filament panel:
+                CollectionCommand::class,
+                DocumentCommand::class,
+                SearchCommand::class,
+                ChatCommand::class,
+                ConversationCommand::class,
+                StatsCommand::class,
             ]);
         }
 
         // Load migrations for tests / auto-discovery; publishing lets apps own them.
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+
+        $this->registerApiRoutes();
+        $this->registerMcpServer();
+    }
+
+    /**
+     * Register the optional JSON API (config-gated, prefixed, guarded by the
+     * configured middleware).
+     */
+    private function registerApiRoutes(): void
+    {
+        if (! config('ai-kit.features.api', false)) {
+            return;
+        }
+
+        Route::middleware((array) config('ai-kit.api.middleware', ['api']))
+            ->prefix((string) config('ai-kit.api.prefix', 'api/ai-kit'))
+            ->group(__DIR__ . '/../routes/api.php');
+    }
+
+    /**
+     * Register the optional MCP server. Requires laravel/mcp — silently skipped
+     * when the package is not installed, so core has no hard dependency on it.
+     */
+    private function registerMcpServer(): void
+    {
+        if (! config('ai-kit.features.mcp', false) || ! class_exists(\Laravel\Mcp\Facades\Mcp::class)) {
+            return;
+        }
+
+        $handle = (string) config('ai-kit.mcp.handle', 'ai-kit');
+        \Laravel\Mcp\Facades\Mcp::local($handle, AiKitServer::class);
+
+        if (config('ai-kit.mcp.web', false)) {
+            \Laravel\Mcp\Facades\Mcp::web((string) config('ai-kit.mcp.web_route', 'mcp/ai-kit'), AiKitServer::class)
+                ->middleware((array) config('ai-kit.mcp.web_middleware', ['api']));
+        }
     }
 
     private function registerPublishing(): void

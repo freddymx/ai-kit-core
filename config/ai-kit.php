@@ -187,6 +187,42 @@ return [
     'features' => [
         'dashboard' => (bool) env('AI_KIT_DASHBOARD', true),
         'token_usage' => (bool) env('AI_KIT_TOKEN_USAGE', true),
+        // Optional headless surfaces (off by default).
+        'api' => (bool) env('AI_KIT_API', false),
+        'mcp' => (bool) env('AI_KIT_MCP', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | HTTP API (optional)
+    |--------------------------------------------------------------------------
+    |
+    | JSON endpoints for chat, search, collections, documents, conversations,
+    | and usage. Enabled by features.api. Locked behind auth by default — set
+    | your own guard (or ['api'] for public) in "middleware".
+    |
+    */
+    'api' => [
+        'prefix' => env('AI_KIT_API_PREFIX', 'api/ai-kit'),
+        'middleware' => ['api', 'auth:sanctum'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | MCP server (optional)
+    |--------------------------------------------------------------------------
+    |
+    | Expose ai-kit as a Model Context Protocol server (requires laravel/mcp).
+    | Enabled by features.mcp. "local" registers a stdio server runnable via
+    | `php artisan mcp:start {handle}`; "web" registers an HTTP transport route.
+    |
+    */
+    'mcp' => [
+        'handle' => env('AI_KIT_MCP_HANDLE', 'ai-kit'),
+        'web' => (bool) env('AI_KIT_MCP_WEB', false),
+        'web_route' => env('AI_KIT_MCP_WEB_ROUTE', 'mcp/ai-kit'),
+        'web_middleware' => ['api', 'auth:sanctum'],
+        'default_collection' => env('AI_KIT_MCP_COLLECTION'), // null = allow any collection param
     ],
 
     /*

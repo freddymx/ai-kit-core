@@ -16,8 +16,12 @@
         "smalot/pdfparser": "^2.7"
     },
     "require-dev": {
+        "laravel/mcp": "^0.9",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^3.0"
+    },
+    "suggest": {
+        "laravel/mcp": "Expose ai-kit as an MCP server (search/ask/ingest tools) — required only when config('ai-kit.features.mcp') is enabled."
     },
     "autoload": {
         "psr-4": {

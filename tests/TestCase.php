@@ -38,6 +38,10 @@ abstract class TestCase extends Orchestra
         $app['config']->set('ai-kit.chunking.size', 300);
         $app['config']->set('ai-kit.chunking.overlap', 40);
 
+        // Enable the HTTP API for tests, without an auth guard (no sanctum in CI).
+        $app['config']->set('ai-kit.features.api', true);
+        $app['config']->set('ai-kit.api.middleware', ['api']);
+
         // Deterministic, offline embeddings — no API keys required in CI.
         $app->singleton(Embedder::class, fn (): Embedder => new FakeEmbedder());
     }

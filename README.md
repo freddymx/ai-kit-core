@@ -188,6 +188,56 @@ Enable with `AI_KIT_TENANCY=true`.
 | `ai-kit:ingest {path} --collection=` | Ingest a file or directory |
 | `ai-kit:ingest-url {url} --collection=` | Fetch + ingest a web page |
 
+## Headless surfaces (CLI · HTTP API · MCP)
+
+Everything the Filament panel does is reachable without Filament. All four
+surfaces call the same service layer (`ChatService`, `CollectionService`,
+`DocumentService`), so behaviour is identical everywhere.
+
+### CLI
+
+| Command | Purpose |
+|---|---|
+| `ai-kit:collection {list\|new\|show\|delete}` | Manage knowledge bases (`--json`) |
+| `ai-kit:document {list\|chunks\|reindex\|delete}` | Manage documents (`--collection`, `--json`) |
+| `ai-kit:search {query} --collection=` | Raw retrieval, no LLM (`--json`) |
+| `ai-kit:chat {collection}` | Interactive grounded chat REPL |
+| `ai-kit:conversation {list\|show}` | Conversation log + token usage (`--json`) |
+| `ai-kit:stats` | Documents/chunks/tokens/cost (`--json`) |
+
+### HTTP API (optional)
+
+Enable with `AI_KIT_API=true`. Locked behind auth by default
+(`config('ai-kit.api.middleware') = ['api','auth:sanctum']`); set your own guard,
+or `['api']` for public. Prefix: `AI_KIT_API_PREFIX` (default `api/ai-kit`).
+
+```
+POST  /chat                          { message, collection?, conversation_id? } → answer + citations + usage
+POST  /chat/stream                   SSE (token-by-token)
+POST  /search                        { query, collection?, top? } → chunks
+GET   /collections                   list
+POST  /collections                   { name, slug?, description? }
+GET   /collections/{slug}            + stats
+GET   /collections/{slug}/documents  list
+POST  /collections/{slug}/documents  { url | text | file, title?, sync? } → ingest
+GET   /conversations                 list (+ token totals)
+GET   /conversations/{id}            thread + per-message tokens
+GET   /usage?days=30                 totals + daily series
+```
+
+### MCP server (optional)
+
+Expose ai-kit to MCP clients (Claude Desktop, IDE agents). Requires
+`composer require laravel/mcp`, then `AI_KIT_MCP=true`. Tools: `search_knowledge_base`,
+`ask_knowledge_base`, `list_collections`, `ingest_url`. Serve over stdio:
+
+```bash
+php artisan mcp:start ai-kit
+```
+
+Set `AI_KIT_MCP_WEB=true` to also register an HTTP transport route
+(`config('ai-kit.mcp.web_route')`, guarded by `mcp.web_middleware`).
+
 ## Testing
 
 The suite runs **offline with no API keys** — LLM calls use the AI SDK's fakes, embeddings use a deterministic in-memory double.
