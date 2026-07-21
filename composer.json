@@ -1,0 +1,47 @@
+{
+    "name": "solutionforest/ai-kit-core",
+    "description": "Core of ai-kit: document ingestion, chunking, extraction, vector retrieval (sqlite-vec + pgvector), and RAG agents built on the official Laravel AI SDK.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["laravel", "ai", "rag", "chatbot", "pgvector", "sqlite-vec", "embeddings"],
+    "require": {
+        "php": "^8.3",
+        "illuminate/contracts": "^12.0|^13.0",
+        "illuminate/database": "^12.0|^13.0",
+        "illuminate/support": "^12.0|^13.0",
+        "illuminate/http": "^12.0|^13.0",
+        "illuminate/bus": "^12.0|^13.0",
+        "laravel/ai": "^0.9",
+        "laravel/prompts": "^0.3.6",
+        "smalot/pdfparser": "^2.7"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0|^11.0",
+        "pestphp/pest": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SolutionForest\\AiKit\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SolutionForest\\AiKit\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "SolutionForest\\AiKit\\AiKitServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

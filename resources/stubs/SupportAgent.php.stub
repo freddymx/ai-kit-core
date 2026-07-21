@@ -1,0 +1,26 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Ai;
+
+use SolutionForest\AiKit\Agents\RagAgent;
+use Stringable;
+
+/**
+ * Your application's RAG agent. Customise the instructions below — they steer
+ * how the assistant answers and cites sources. Point config('ai-kit.agent.class')
+ * at this class (the installer does this for you).
+ */
+final class SupportAgent extends RagAgent
+{
+    public function instructions(): Stringable|string
+    {
+        return <<<'PROMPT'
+        You are the support assistant for our product. Always search the knowledge
+        base before answering. Answer only from retrieved context; if the answer is
+        not in the knowledge base, say you don't know and suggest contacting support.
+        Be concise and cite sources by document title.
+        PROMPT;
+    }
+}
