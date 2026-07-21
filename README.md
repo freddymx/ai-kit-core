@@ -10,6 +10,52 @@
 - **Provider-agnostic** — OpenAI, Anthropic, OpenRouter, Gemini, Groq, Mistral, … (anything the AI SDK supports).
 - **Fully testable offline** — no API keys needed in CI.
 
+## Why ai-kit?
+
+Building a grounded, cited RAG chatbot over your own documents in Laravel means
+wiring together a dozen moving parts: parsing PDFs/Word/Excel, chunking text,
+generating embeddings, running a vector store, similarity search, prompt
+orchestration, streaming, citations, conversation history, and cost tracking.
+
+**ai-kit does all of that for you** — on the official Laravel AI SDK, with no
+external vector database. `composer require` → `php artisan ai-kit:install` →
+a working, source-cited assistant in under 30 minutes. Then expose it however
+you like: a Livewire chat widget, an admin panel, a JSON API, a CLI, or an MCP
+server for AI agents.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    UI["Livewire UI<br/>(ai-kit-ui)"]
+    CLI["Artisan CLI"]
+    API["HTTP API"]
+    MCP["MCP Server"]
+
+    subgraph services["Service layer"]
+        SVC["ChatService · CollectionService · DocumentService"]
+    end
+
+    UI --> SVC
+    CLI --> SVC
+    API --> SVC
+    MCP --> SVC
+
+    SVC --> ING["Ingestion<br/>extract → chunk → embed"]
+    SVC --> RET["Retriever"]
+    SVC --> AGENT["RagAgent<br/>tool / inject mode"]
+
+    ING --> VS[("Vector store<br/>sqlite-vec / pgvector")]
+    RET --> VS
+    ING --> LLM["Laravel AI SDK<br/>(any provider)"]
+    AGENT --> RET
+    AGENT --> LLM
+```
+
+**One core, four faces.** Every surface calls the same service layer, so RAG
+behaviour is identical whether a user chats in the browser, you script the CLI,
+another service hits the API, or an AI agent connects over MCP.
+
 ## Requirements
 
 - PHP **8.3+**
@@ -291,6 +337,20 @@ The suite runs **offline with no API keys** — LLM calls use the AI SDK's fakes
 ```bash
 composer install && vendor/bin/pest
 ```
+
+## The ai-kit suite
+
+**One core, four faces** — the Livewire UI, CLI, HTTP API, and MCP server all
+call the same service layer (`ChatService`, `CollectionService`,
+`DocumentService`), so behaviour is identical everywhere.
+
+| Package | Purpose |
+| --- | --- |
+| **solutionforest/ai-kit-core** (this) | Ingestion, retrieval, agents + CLI, HTTP API, MCP |
+| [solutionforest/ai-kit-ui](https://github.com/solutionforest/ai-kit-ui) | Livewire 4 chat component |
+| [solutionforest/ai-kit-filament](https://github.com/solutionforest/ai-kit-filament) | Filament v5 admin panel |
+
+`ai-kit-ui` and `ai-kit-filament` are optional; core is fully usable headless.
 
 ## License
 
