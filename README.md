@@ -238,6 +238,52 @@ php artisan mcp:start ai-kit
 Set `AI_KIT_MCP_WEB=true` to also register an HTTP transport route
 (`config('ai-kit.mcp.web_route')`, guarded by `mcp.web_middleware`).
 
+### Examples
+
+**HTTP API** (Bearer auth by default):
+
+```bash
+# Ask a question
+curl -X POST https://your-app.test/api/ai-kit/chat \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"message":"What is the refund window?","collection":"handbook"}'
+
+# Raw search
+curl -X POST https://your-app.test/api/ai-kit/search \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"query":"refunds","collection":"handbook","top":5}'
+
+# Ingest a URL
+curl -X POST https://your-app.test/api/ai-kit/collections/handbook/documents \
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/faq"}'
+```
+
+**MCP** — point a client (e.g. Claude Desktop) at the stdio server:
+
+```json
+{
+  "mcpServers": {
+    "ai-kit": {
+      "command": "php",
+      "args": ["artisan", "mcp:start", "ai-kit"],
+      "cwd": "/path/to/your/laravel/app"
+    }
+  }
+}
+```
+
+**Programmatic** (any surface, same result):
+
+```php
+use SolutionForest\AiKit\Services\ChatService;
+
+$result = app(ChatService::class)->ask('What is the refund window?', 'handbook');
+$result->answer;      // string
+$result->citations;   // [{document_title, chunk_index, score, content}, ...]
+$result->usage;       // {in, out, total}
+```
+
 ## Testing
 
 The suite runs **offline with no API keys** — LLM calls use the AI SDK's fakes, embeddings use a deterministic in-memory double.
