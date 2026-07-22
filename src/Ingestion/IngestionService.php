@@ -165,6 +165,14 @@ final class IngestionService
         $path = (string) $document->source_path;
         $mime = (string) ($document->mime ?? 'text/plain');
 
+        if ($path === '') {
+            throw new \RuntimeException("Document [{$document->title}] has no source file to extract — re-upload the file or add it from a URL.");
+        }
+
+        if (! is_file($path)) {
+            throw new \RuntimeException("Source file for [{$document->title}] is missing at [{$path}] — on ephemeral filesystems (e.g. Laravel Cloud) uploads must be stored on a persistent disk.");
+        }
+
         $text = trim($this->extractor->extract($path, $mime));
 
         if ($text === '') {

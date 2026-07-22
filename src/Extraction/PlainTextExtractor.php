@@ -31,6 +31,10 @@ final class PlainTextExtractor implements TextExtractor
 
     public function extract(string $path, string $mime): string
     {
+        if ($path === '') {
+            throw new RuntimeException('No source path provided for text extraction.');
+        }
+
         $contents = @file_get_contents($path);
 
         if ($contents === false) {

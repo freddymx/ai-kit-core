@@ -78,3 +78,21 @@ it('marks a document failed when extraction yields no text', function (): void {
     expect(fn () => $service->sync($document))->toThrow(RuntimeException::class);
     expect($document->fresh()->status)->toBe(DocumentStatus::Failed);
 });
+
+it('fails gracefully when a document has no source path instead of crashing', function (): void {
+    $collection = Collection::create(['name' => 'Handbook']);
+
+    $service = app(IngestionService::class);
+    $document = Document::create([
+        'collection_id' => $collection->id,
+        'title' => 'Orphaned upload',
+        'source_path' => null,
+        'mime' => null,
+    ]);
+
+    // Previously threw a fatal ValueError ("Path must not be empty") from
+    // file_get_contents('') and killed the queue worker.
+    expect(fn () => $service->sync($document))->toThrow(RuntimeException::class, 'no source file');
+    expect($document->fresh()->status)->toBe(DocumentStatus::Failed);
+    expect($document->fresh()->failure_reason)->toContain('no source file');
+});
