@@ -1,6 +1,11 @@
 # ai-kit-core
 
-**The engine of [ai-kit](https://github.com/solutionforest/ai-kit)** — document ingestion, chunking, extraction, vector retrieval, and RAG agents for Laravel, built on the official [Laravel AI SDK](https://laravel.com/docs/ai).
+![PHP](https://img.shields.io/badge/PHP-8.3+-777BB4?logo=php&logoColor=white)
+![Laravel](https://img.shields.io/badge/Laravel-12%20|%2013-FF2D20?logo=laravel&logoColor=white)
+![Laravel AI SDK](https://img.shields.io/badge/laravel%2Fai-^0.9-FF2D20)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+**The engine of the ai-kit suite** — document ingestion, chunking, extraction, vector retrieval, and RAG agents for Laravel, built on the official [Laravel AI SDK](https://laravel.com/docs/ai).
 
 `composer require` → `php artisan ai-kit:install` → a grounded, cited RAG assistant over your own documents — with **no external vector database required**.
 
@@ -27,7 +32,7 @@ server for AI agents.
 
 ```mermaid
 flowchart TB
-    UI["Livewire UI<br/>(ai-kit-ui)"]
+    UI["Livewire UI<br/>(ai-kit-ui-livewire)"]
     CLI["Artisan CLI"]
     API["HTTP API"]
     MCP["MCP Server"]
@@ -347,10 +352,10 @@ call the same service layer (`ChatService`, `CollectionService`,
 | Package | Purpose |
 | --- | --- |
 | **solutionforest/ai-kit-core** (this) | Ingestion, retrieval, agents + CLI, HTTP API, MCP |
-| [solutionforest/ai-kit-ui](https://github.com/solutionforest/ai-kit-ui) | Livewire 4 chat component |
+| [solutionforest/ai-kit-ui-livewire](https://github.com/solutionforest/ai-kit-ui-livewire) | Livewire 4 chat component |
 | [solutionforest/ai-kit-filament](https://github.com/solutionforest/ai-kit-filament) | Filament v5 admin panel |
 
-`ai-kit-ui` and `ai-kit-filament` are optional; core is fully usable headless.
+`ai-kit-ui-livewire` and `ai-kit-filament` are optional; core is fully usable headless.
 
 ## License
 
