@@ -194,6 +194,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Livewire chat UI (ai-kit-ui-livewire)
+    |--------------------------------------------------------------------------
+    |
+    | App-wide defaults for the <livewire:ai-kit.chat /> component. Each can be
+    | overridden per-instance via a prop (e.g. :citations="false").
+    |
+    */
+    'ui' => [
+        'citations' => (bool) env('AI_KIT_UI_CITATIONS', true),
+        'stream_middleware' => ['web'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | HTTP API (optional)
     |--------------------------------------------------------------------------
     |
