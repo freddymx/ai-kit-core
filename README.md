@@ -70,7 +70,7 @@ another service hits the API, or an AI agent connects over MCP.
 ## Install
 
 ```bash
-composer require solutionforest/ai-kit-core
+composer require solution-forest/ai-kit-core
 php artisan ai-kit:install
 ```
 
@@ -351,9 +351,9 @@ call the same service layer (`ChatService`, `CollectionService`,
 
 | Package | Purpose |
 | --- | --- |
-| **solutionforest/ai-kit-core** (this) | Ingestion, retrieval, agents + CLI, HTTP API, MCP |
-| [solutionforest/ai-kit-ui-livewire](https://github.com/solutionforest/ai-kit-ui-livewire) | Livewire 4 chat component |
-| [solutionforest/ai-kit-filament](https://github.com/solutionforest/ai-kit-filament) | Filament v5 admin panel |
+| **solution-forest/ai-kit-core** (this) | Ingestion, retrieval, agents + CLI, HTTP API, MCP |
+| [solution-forest/ai-kit-ui-livewire](https://github.com/solutionforest/ai-kit-ui-livewire) | Livewire 4 chat component |
+| [solution-forest/ai-kit-filament](https://github.com/solutionforest/ai-kit-filament) | Filament v5 admin panel |
 
 `ai-kit-ui-livewire` and `ai-kit-filament` are optional; core is fully usable headless.
 
