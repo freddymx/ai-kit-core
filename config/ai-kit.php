@@ -88,6 +88,10 @@ return [
     | Provider + model used for chat completions. "fallback" is passed to the
     | AI SDK's provider fallback so a second provider is tried on failure.
     |
+    | "max_steps" is the agent's step budget for one turn: each search the model
+    | runs costs a step, and writing the answer costs the last one. Too low and a
+    | question needing more than one search is cut off before it can be answered.
+    |
     */
     'chat' => [
         'provider' => env('AI_KIT_CHAT_PROVIDER', 'anthropic'),
@@ -96,6 +100,7 @@ return [
             // ['provider' => 'openai', 'model' => 'gpt-5'],
         ],
         'streaming' => (bool) env('AI_KIT_STREAMING', true),
+        'max_steps' => (int) env('AI_KIT_MAX_STEPS', 5),
     ],
 
     /*

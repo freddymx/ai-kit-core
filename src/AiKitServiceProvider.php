@@ -8,6 +8,8 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Storage\DatabaseConversationStore;
 use SolutionForest\AiKit\Mcp\AiKitServer;
 use SolutionForest\AiKit\Chunking\RecursiveTextChunker;
 use SolutionForest\AiKit\Console\ChatCommand;
@@ -25,6 +27,7 @@ use SolutionForest\AiKit\Contracts\Embedder;
 use SolutionForest\AiKit\Contracts\Retriever;
 use SolutionForest\AiKit\Contracts\TextExtractor;
 use SolutionForest\AiKit\Contracts\VectorIndex;
+use SolutionForest\AiKit\Conversations\ConsistentConversationStore;
 use SolutionForest\AiKit\Embeddings\AiSdkEmbedder;
 use SolutionForest\AiKit\Extraction\ExcelExtractor;
 use SolutionForest\AiKit\Extraction\ExtractorManager;
@@ -94,8 +97,37 @@ final class AiKitServiceProvider extends ServiceProvider
         // Load migrations for tests / auto-discovery; publishing lets apps own them.
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
 
+        $this->registerConversationStore();
         $this->registerApiRoutes();
         $this->registerMcpServer();
+    }
+
+    /**
+     * Swap the AI SDK's conversation store for one that keeps tool calls paired
+     * with their outputs, so a truncated tool loop cannot leave a conversation
+     * permanently unusable (a 400 "No tool output found for function call …").
+     *
+     * Bound in boot() — every register() has run by then, so this reliably wins
+     * over the SDK's own binding regardless of provider order. An application
+     * that supplies its own store is left alone.
+     */
+    private function registerConversationStore(): void
+    {
+        if (! class_exists(DatabaseConversationStore::class)) {
+            return;
+        }
+
+        $current = $this->app->bound(ConversationStore::class)
+            ? $this->app->make(ConversationStore::class)
+            : null;
+
+        if ($current !== null && $current::class !== DatabaseConversationStore::class) {
+            return;
+        }
+
+        $this->app->singleton(ConversationStore::class, fn (): ConversationStore => new ConsistentConversationStore(
+            config('ai.conversations.connection'),
+        ));
     }
 
     /**
