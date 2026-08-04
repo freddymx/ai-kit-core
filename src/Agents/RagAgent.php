@@ -95,6 +95,22 @@ class RagAgent implements Agent, Conversational, HasTools
         return config('ai-kit.chat.model') ?: null;
     }
 
+    /**
+     * The agent's step budget: tool round-trips plus the step that writes the
+     * answer. Read by the AI SDK's generation loop.
+     *
+     * The SDK's default is 1.5x the tool count, which gives a one-tool RAG agent
+     * only two steps — so a turn that needs a second search runs out mid-loop and
+     * ends on an unexecuted tool call. See ConsistentConversationStore for why
+     * that used to break the whole conversation.
+     */
+    public function maxSteps(): ?int
+    {
+        $configured = (int) config('ai-kit.chat.max_steps', 5);
+
+        return $configured > 0 ? $configured : null;
+    }
+
     public function forCollection(string $collection): static
     {
         $this->collection = $collection;
