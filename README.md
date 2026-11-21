@@ -1,8 +1,8 @@
 # ai-kit-core
 
-![PHP](https://img.shields.io/badge/PHP-8.3+-777BB4?logo=php&logoColor=white)
+![PHP](https://img.shields.io/badge/PHP-8.5+-777BB4?logo=php&logoColor=white)
 ![Laravel](https://img.shields.io/badge/Laravel-12%20|%2013-FF2D20?logo=laravel&logoColor=white)
-![Laravel AI SDK](https://img.shields.io/badge/laravel%2Fai-^0.9-FF2D20)
+![Laravel AI SDK](https://img.shields.io/badge/laravel%2Fai-^1.4-FF2D20)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 **The engine of the ai-kit suite** — document ingestion, chunking, extraction, vector retrieval, and RAG agents for Laravel, built on the official [Laravel AI SDK](https://laravel.com/docs/ai).
@@ -63,9 +63,9 @@ another service hits the API, or an AI agent connects over MCP.
 
 ## Requirements
 
-- PHP **8.3+**
+- PHP **8.5+**
 - Laravel **12 or 13**
-- `laravel/ai` **^0.9**
+- `laravel/ai` **^1.4**
 
 ## Install
 
@@ -204,6 +204,24 @@ app(UsageStats::class)->conversationTokens($id);
 ```
 
 Cost is estimated from `config('ai-kit.pricing')` ($ per 1M tokens, per model) using the active chat model's rate.
+
+## Upgrading from ai-kit 0.2 (AI SDK 0.x → 1.x)
+
+The Laravel AI SDK **1.0** changed how conversations are stored. If your app already
+persists conversations, the SDK's own migration will not run again — publish and run
+the backfill migration from the [AI SDK upgrade guide](https://github.com/laravel/ai/blob/1.x/UPGRADE.md)
+before deploying. It rewrites `agent_conversation_messages` from the old
+`tool_calls` / `tool_results` columns into a single `steps` column and replaces
+`user_id` with `participant_type` / `participant_id`.
+
+What ai-kit itself changed:
+
+- `RagAgent::prompt()` / `stream()` accept the SDK's wider input types
+  (`AgentInput|UserMessage|Decisions|string`).
+- Conversations are scoped by participant (`participant_type` + `participant_id`)
+  instead of `user_id`.
+- Token usage is read from the SDK's `input_tokens` / `output_tokens` keys; rows
+  written by the old SDK (`prompt_tokens` / `completion_tokens`) are still counted.
 
 ## Multi-tenancy
 

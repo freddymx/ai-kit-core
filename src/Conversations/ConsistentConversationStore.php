@@ -5,17 +5,12 @@ declare(strict_types=1);
 namespace SolutionForest\AiKit\Conversations;
 
 use Illuminate\Support\Collection;
-use Laravel\Ai\Messages\AssistantMessage;
-use Laravel\Ai\Messages\Message;
-use Laravel\Ai\Messages\ToolResultMessage;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
-use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Storage\DatabaseConversationStore;
 
 /**
- * A conversation store that keeps tool calls and their outputs paired.
+ * A conversation store that keeps tool calls paired with their outputs.
  *
  * Providers reject a request whose history contains a tool call with no
  * matching output — OpenAI answers the /responses call with
@@ -28,135 +23,50 @@ use Laravel\Ai\Storage\DatabaseConversationStore;
  * while the model is still calling tools: the SDK records that final call but
  * never executes it, so no output is ever produced for it. Raising the budget
  * (see ai-kit.chat.max_steps) makes that rarer, not impossible, so this store
- * enforces the invariant on both sides of the database:
+ * enforces the invariant before the turn is persisted: a tool call that has no
+ * output — and is not waiting for an approval decision — is never written.
  *
- *  - on write, unpaired calls and outputs are dropped before they are persisted;
- *  - on read, they are dropped from the replayed history, which also repairs
- *    conversations that were already stored broken.
+ * The AI SDK's own store already repairs such a conversation when it replays
+ * it, so history written before this store was in place stays usable.
  */
 class ConsistentConversationStore extends DatabaseConversationStore
 {
-    public function storeAssistantMessage(string $conversationId, string|int|null $userId, AgentPrompt $prompt, AgentResponse $response): string
-    {
-        return parent::storeAssistantMessage($conversationId, $userId, $prompt, $this->pairedResponse($response));
-    }
-
     /**
-     * @return Collection<int, Message>
-     */
-    public function getLatestConversationMessages(string $conversationId, int $limit): Collection
-    {
-        return $this->pairedMessages(parent::getLatestConversationMessages($conversationId, $limit));
-    }
-
-    /**
-     * The response with any unpaired tool call / output removed. The original is
-     * left untouched — the caller still owns it.
-     */
-    protected function pairedResponse(AgentResponse $response): AgentResponse
-    {
-        $answered = $this->keys($response->toolResults);
-        $called = $this->keys($response->toolCalls);
-
-        $toolCalls = $response->toolCalls->filter(fn (ToolCall $call): bool => isset($answered[$this->key($call)]))->values();
-        $toolResults = $response->toolResults->filter(fn (ToolResult $result): bool => isset($called[$this->key($result)]))->values();
-
-        if ($toolCalls->count() === $response->toolCalls->count()
-            && $toolResults->count() === $response->toolResults->count()) {
-            return $response;
-        }
-
-        $paired = clone $response;
-        $paired->toolCalls = $toolCalls;
-        $paired->toolResults = $toolResults;
-
-        return $paired;
-    }
-
-    /**
-     * A replayed history with any unpaired tool call / output removed, plus the
-     * messages left empty by that removal.
+     * The steps of a turn, with every unanswered tool call removed.
      *
-     * @param  Collection<int, Message>  $messages
-     * @return Collection<int, Message>
+     * @return Collection<int, array{content: string, tool_calls: array, reasoning: string, replay_blocks: array, provider_tool_calls: array}>
      */
-    protected function pairedMessages(Collection $messages): Collection
+    protected function stepsFor(AgentPrompt $prompt, AgentResponse $response): Collection
     {
-        $answered = $this->keys(
-            $messages->whereInstanceOf(ToolResultMessage::class)->flatMap(fn (ToolResultMessage $m): Collection => $m->toolResults)
-        );
+        return parent::stepsFor($prompt, $response)
+            ->map(function (array $step): array {
+                $calls = collect($step['tool_calls']);
 
-        $called = $this->keys(
-            $messages->whereInstanceOf(AssistantMessage::class)->flatMap(fn (AssistantMessage $m): Collection => $m->toolCalls)
-        );
+                $paired = $calls->filter(fn (array $toolCall): bool => $this->isPaired($toolCall))->values();
 
-        return $messages
-            ->map(fn (Message $message): Message => match (true) {
-                $message instanceof AssistantMessage => $this->pairedAssistantMessage($message, $answered),
-                $message instanceof ToolResultMessage => $this->pairedToolResultMessage($message, $called),
-                default => $message,
-            })
-            ->reject(fn (Message $message): bool => $this->isEmpty($message))
-            ->values();
+                if ($paired->count() === $calls->count()) {
+                    return $step;
+                }
+
+                return [
+                    ...$step,
+                    'tool_calls' => $paired->all(),
+                    // The raw provider blocks still name the dropped call, so they
+                    // cannot be replayed without it.
+                    'replay_blocks' => [],
+                ];
+            });
     }
 
     /**
-     * @param  array<string, true>  $answered
-     */
-    protected function pairedAssistantMessage(AssistantMessage $message, array $answered): AssistantMessage
-    {
-        $toolCalls = $message->toolCalls->filter(fn (ToolCall $call): bool => isset($answered[$this->key($call)]))->values();
-
-        return $toolCalls->count() === $message->toolCalls->count()
-            ? $message
-            : new AssistantMessage((string) $message->content, $toolCalls, $message->providerContentBlocks);
-    }
-
-    /**
-     * @param  array<string, true>  $called
-     */
-    protected function pairedToolResultMessage(ToolResultMessage $message, array $called): ToolResultMessage
-    {
-        $toolResults = $message->toolResults->filter(fn (ToolResult $result): bool => isset($called[$this->key($result)]))->values();
-
-        return $toolResults->count() === $message->toolResults->count()
-            ? $message
-            : new ToolResultMessage($toolResults);
-    }
-
-    /**
-     * A message that would contribute nothing to the next request.
-     */
-    protected function isEmpty(Message $message): bool
-    {
-        if ($message instanceof AssistantMessage) {
-            return $message->toolCalls->isEmpty()
-                && $message->providerContentBlocks === []
-                && blank($message->content);
-        }
-
-        return $message instanceof ToolResultMessage && $message->toolResults->isEmpty();
-    }
-
-    /**
-     * The pairing keys of the given tool calls / results, as a lookup set.
+     * A tool call that either has its output recorded, or is still waiting for
+     * an approval decision — the SDK has to keep the latter to resume the turn.
      *
-     * @param  Collection<int, ToolCall|ToolResult>  $items
-     * @return array<string, true>
+     * @param  array<string, mixed>  $toolCall
      */
-    protected function keys(Collection $items): array
+    private function isPaired(array $toolCall): bool
     {
-        return $items
-            ->mapWithKeys(fn (ToolCall|ToolResult $item): array => [$this->key($item) => true])
-            ->all();
-    }
-
-    /**
-     * The identifier a provider pairs a call with its output on. Gateways send
-     * the result id (OpenAI's "call_id") when there is one, else the call id.
-     */
-    protected function key(ToolCall|ToolResult $item): string
-    {
-        return $item->resultId ?? $item->id;
+        return array_key_exists('result', $toolCall)
+            || array_key_exists('approval_reason', $toolCall);
     }
 }

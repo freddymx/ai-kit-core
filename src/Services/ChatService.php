@@ -123,8 +123,11 @@ final class ChatService
     private function usage(object $response): array
     {
         $usage = $response->usage ?? null;
-        $in = (int) ($usage->promptTokens ?? 0);
-        $out = (int) ($usage->completionTokens ?? 0);
+
+        // The AI SDK renamed Usage::$promptTokens / $completionTokens to
+        // $inputTokens / $outputTokens in v1.
+        $in = (int) ($usage->inputTokens ?? 0);
+        $out = (int) ($usage->outputTokens ?? 0);
 
         return ['in' => $in, 'out' => $out, 'total' => $in + $out];
     }

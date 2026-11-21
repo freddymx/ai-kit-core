@@ -5,20 +5,20 @@
     "license": "MIT",
     "keywords": ["laravel", "ai", "rag", "chatbot", "pgvector", "sqlite-vec", "embeddings"],
     "require": {
-        "php": "^8.3",
+        "php": "^8.5",
         "illuminate/contracts": "^12.0|^13.0",
         "illuminate/database": "^12.0|^13.0",
         "illuminate/support": "^12.0|^13.0",
         "illuminate/http": "^12.0|^13.0",
         "illuminate/bus": "^12.0|^13.0",
-        "laravel/ai": "^0.9",
+        "laravel/ai": "^1.4",
         "laravel/prompts": "^0.3.6",
         "smalot/pdfparser": "^2.7"
     },
     "require-dev": {
-        "laravel/mcp": "^0.9",
+        "laravel/mcp": "^1.0",
         "orchestra/testbench": "^10.0|^11.0",
-        "pestphp/pest": "^3.0"
+        "pestphp/pest": "^5.0"
     },
     "suggest": {
         "laravel/mcp": "Expose ai-kit as an MCP server (search/ask/ingest tools) — required only when config('ai-kit.features.mcp') is enabled."
@@ -35,7 +35,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.2.x-dev"
+            "dev-main": "0.3.x-dev"
         },
         "laravel": {
             "providers": [

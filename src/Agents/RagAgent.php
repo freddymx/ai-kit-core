@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace SolutionForest\AiKit\Agents;
 
+use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\AgentInput;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Promptable;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StreamableAgentResponse;
@@ -50,7 +53,7 @@ class RagAgent implements Agent, Conversational, HasTools
      * specify them — so AI_KIT_CHAT_PROVIDER/MODEL actually take effect.
      */
     public function prompt(
-        string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,
@@ -66,7 +69,7 @@ class RagAgent implements Agent, Conversational, HasTools
     }
 
     public function stream(
-        string $prompt,
+        AgentInput|UserMessage|Decisions|string $prompt,
         array $attachments = [],
         Lab|array|string|null $provider = null,
         ?string $model = null,

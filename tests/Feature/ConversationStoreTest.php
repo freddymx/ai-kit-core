@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Enums\MessageStatus;
 use Laravel\Ai\Gateway\OpenAi\Concerns\MapsMessages;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\ToolResultMessage;
@@ -14,9 +16,9 @@ use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
-use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Storage\DatabaseConversationStore;
 use SolutionForest\AiKit\Agents\RagAgent;
 use SolutionForest\AiKit\Conversations\ConsistentConversationStore;
@@ -33,29 +35,57 @@ function storeTurn(string $conversationId, string $question, string $answer, arr
 {
     DB::table('agent_conversations')->insertOrIgnore([
         'id' => $conversationId,
-        'user_id' => null,
+        'participant_type' => null,
+        'participant_id' => null,
         'title' => 'Test conversation',
         'created_at' => now(),
         'updated_at' => now(),
     ]);
 
-    foreach ([['user', $question, [], []], ['assistant', $answer, $toolCalls, $toolResults]] as [$role, $content, $calls, $results]) {
+    foreach ([['user', $question, []], ['assistant', $answer, $toolCalls]] as [$role, $content, $calls]) {
         DB::table('agent_conversation_messages')->insert([
             'id' => (string) Str::uuid7(),
             'conversation_id' => $conversationId,
-            'user_id' => null,
+            'participant_type' => null,
+            'participant_id' => null,
             'agent' => RagAgent::class,
             'role' => $role,
             'content' => $content,
             'attachments' => '[]',
-            'tool_calls' => json_encode($calls),
-            'tool_results' => json_encode($results),
+            'steps' => json_encode($role === 'assistant' ? [assistantStep($content, $calls, $toolResults)] : []),
             'usage' => '[]',
             'meta' => '[]',
+            'status' => MessageStatus::Completed->value,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
     }
+}
+
+/**
+ * A step of a stored assistant turn, as the AI SDK v1 writes it: the tool
+ * calls it made, each carrying the output it was answered with.
+ *
+ * @param  array<int, array<string, mixed>>  $toolCalls
+ * @param  array<int, array<string, mixed>>  $toolResults
+ * @return array<string, mixed>
+ */
+function assistantStep(string $content, array $toolCalls, array $toolResults = []): array
+{
+    $results = collect($toolResults)->keyBy('id');
+
+    return [
+        'content' => $content,
+        'tool_calls' => collect($toolCalls)
+            ->map(fn (array $call): array => isset($results[$call['id']])
+                ? [...$call, ...Arr::only($results[$call['id']], ['result', 'denied', 'failed'])]
+                : $call)
+            ->values()
+            ->all(),
+        'reasoning' => '',
+        'replay_blocks' => [],
+        'provider_tool_calls' => [],
+    ];
 }
 
 /**
@@ -191,9 +221,9 @@ it('keeps a fully paired conversation intact', function (): void {
 });
 
 it('never persists a tool call that has no output', function (): void {
-    $conversationId = app(ConversationStore::class)->storeConversation(null, 'Refunds');
+    $conversationId = app(ConversationStore::class)->storeConversation(null, null, 'Refunds');
 
-    $response = new AgentResponse((string) Str::uuid7(), '', new Usage, new Meta);
+    $response = new AgentResponse((string) Str::uuid7(), '', new TextUsage, new Meta);
     $response->toolCalls = new Collection([
         ToolCall::fromArray(searchCall('call_first')),
         ToolCall::fromArray(searchCall('call_Xm8AMgckjF4fX6svUHuoeIJp')),
@@ -203,13 +233,16 @@ it('never persists a tool call that has no output', function (): void {
     app(ConversationStore::class)->storeAssistantMessage(
         $conversationId,
         null,
+        null,
         new AgentPrompt(new RagAgent('kb'), 'How long do refunds take?', [], Mockery::mock(\Laravel\Ai\Contracts\Providers\TextProvider::class), 'gpt-5'),
         $response,
     );
 
     $stored = DB::table('agent_conversation_messages')->where('conversation_id', $conversationId)->first();
 
-    expect(collect(json_decode($stored->tool_calls, true))->pluck('result_id')->all())->toBe(['call_first']);
+    $calls = collect(json_decode($stored->steps, true))->pluck('tool_calls')->flatten(1);
+
+    expect($calls->pluck('result_id')->all())->toBe(['call_first']);
 
     // The caller's own response object is not mutated by being persisted.
     expect($response->toolCalls)->toHaveCount(2);

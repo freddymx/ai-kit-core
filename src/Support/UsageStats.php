@@ -13,7 +13,9 @@ use Laravel\Ai\Models\ConversationMessage;
  * message (agent_conversation_messages.usage) into dashboard-friendly totals,
  * daily series, and an estimated cost from config('ai-kit.pricing').
  *
- * Usage JSON keys are snake_case: prompt_tokens, completion_tokens, etc.
+ * The AI SDK v1 stores usage under the input_tokens / output_tokens keys;
+ * rows written by v0.x keep the old prompt_tokens / completion_tokens keys,
+ * so both are read.
  */
 final class UsageStats
 {
@@ -84,8 +86,8 @@ final class UsageStats
             ->whereNotNull('usage')
             ->get(['usage'])
             ->each(function (ConversationMessage $m) use (&$prompt, &$completion): void {
-                $prompt += (int) ($m->usage['prompt_tokens'] ?? 0);
-                $completion += (int) ($m->usage['completion_tokens'] ?? 0);
+                $prompt += $this->inputTokens($m->usage);
+                $completion += $this->outputTokens($m->usage);
             });
 
         return ['prompt' => $prompt, 'completion' => $completion, 'total' => $prompt + $completion];
@@ -100,9 +102,45 @@ final class UsageStats
     public static function messageTokens(?array $usage): array
     {
         return [
-            'in' => (int) ($usage['prompt_tokens'] ?? 0),
-            'out' => (int) ($usage['completion_tokens'] ?? 0),
+            'in' => self::inputTokensOf($usage),
+            'out' => self::outputTokensOf($usage),
         ];
+    }
+
+    /**
+     * The input tokens of a usage payload, in either storage format.
+     *
+     * @param  array<string, mixed>|null  $usage
+     */
+    private function inputTokens(?array $usage): int
+    {
+        return self::inputTokensOf($usage);
+    }
+
+    /**
+     * The output tokens of a usage payload, in either storage format.
+     *
+     * @param  array<string, mixed>|null  $usage
+     */
+    private function outputTokens(?array $usage): int
+    {
+        return self::outputTokensOf($usage);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $usage
+     */
+    private static function inputTokensOf(?array $usage): int
+    {
+        return (int) ($usage['input_tokens'] ?? $usage['prompt_tokens'] ?? 0);
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $usage
+     */
+    private static function outputTokensOf(?array $usage): int
+    {
+        return (int) ($usage['output_tokens'] ?? $usage['completion_tokens'] ?? 0);
     }
 
     /**
@@ -137,8 +175,8 @@ final class UsageStats
             ->get(['usage', 'created_at'])
             ->map(fn (ConversationMessage $m): array => [
                 'date' => Carbon::parse($m->created_at)->toDateString(),
-                'prompt' => (int) ($m->usage['prompt_tokens'] ?? 0),
-                'completion' => (int) ($m->usage['completion_tokens'] ?? 0),
+                'prompt' => self::inputTokensOf($m->usage),
+                'completion' => self::outputTokensOf($m->usage),
             ]);
     }
 }

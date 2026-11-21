@@ -3,13 +3,14 @@
 declare(strict_types=1);
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Ai\Enums\MessageStatus;
 use Laravel\Ai\Models\Conversation;
 use Laravel\Ai\Models\ConversationMessage;
 use SolutionForest\AiKit\Support\UsageStats;
 
 uses(RefreshDatabase::class);
 
-function seedMessage(int $prompt, int $completion, string $when = 'now'): void
+function seedMessage(int $prompt, int $completion, string $when = 'now', bool $legacyKeys = false): void
 {
     static $n = 0;
     $n++;
@@ -21,10 +22,12 @@ function seedMessage(int $prompt, int $completion, string $when = 'now'): void
         'role' => 'assistant',
         'content' => 'answer',
         'attachments' => [],
-        'tool_calls' => [],
-        'tool_results' => [],
-        'usage' => ['prompt_tokens' => $prompt, 'completion_tokens' => $completion],
+        'steps' => [],
+        'usage' => $legacyKeys
+            ? ['prompt_tokens' => $prompt, 'completion_tokens' => $completion]
+            : ['input_tokens' => $prompt, 'output_tokens' => $completion],
         'meta' => [],
+        'status' => MessageStatus::Completed,
         'created_at' => now()->parse($when),
     ]);
 }
@@ -39,6 +42,18 @@ it('totals prompt and completion tokens across messages', function (): void {
         ->and($totals['completion'])->toBe(100)
         ->and($totals['total'])->toBe(500)
         ->and($totals['messages'])->toBe(2);
+});
+
+it('still counts rows stored with the pre-v1 usage keys', function (): void {
+    // The AI SDK v1 renamed the stored usage keys to input_tokens /
+    // output_tokens; rows written before the upgrade keep the old ones.
+    seedMessage(100, 20, legacyKeys: true);
+
+    $totals = app(UsageStats::class)->totals();
+
+    expect($totals['prompt'])->toBe(100)
+        ->and($totals['completion'])->toBe(20)
+        ->and($totals['total'])->toBe(120);
 });
 
 it('computes estimated cost from config pricing for the active model', function (): void {
