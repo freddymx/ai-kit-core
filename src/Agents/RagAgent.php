@@ -16,6 +16,7 @@ use Laravel\Ai\Promptable;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StreamableAgentResponse;
 use SolutionForest\AiKit\AiKit;
+use SolutionForest\AiKit\Support\AiProviderResolver;
 use SolutionForest\AiKit\Tools\SearchKnowledgeBase;
 use Stringable;
 
@@ -86,16 +87,20 @@ class RagAgent implements Agent, Conversational, HasTools
 
     /**
      * The configured chat provider (e.g. "openrouter"), or null to use the SDK
-     * default.
+     * default. The sentinel "local" is expanded by AiProviderResolver into an
+     * on-demand Provider object — DB overrides win over .env.
+     *
+     * Resolved via the container so `new RagAgent(...)` keeps working; no
+     * constructor injection means existing callers need no changes.
      */
     public function chatProvider(): Lab|array|string|null
     {
-        return config('ai-kit.chat.provider') ?: null;
+        return app(AiProviderResolver::class)->chatProvider();
     }
 
     public function chatModel(): ?string
     {
-        return config('ai-kit.chat.model') ?: null;
+        return app(AiProviderResolver::class)->chatModel();
     }
 
     /**

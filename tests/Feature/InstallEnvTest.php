@@ -84,3 +84,39 @@ it('does not duplicate the scaffold when already present', function (): void {
     expect($twice)->toBe($once)
         ->and(substr_count($twice, 'AI_KIT_CHAT_PROVIDER='))->toBe(1);
 });
+
+it('upserts the local provider keys', function (): void {
+    $result = InstallCommand::upsertEnv("APP_NAME=AiKit\n", [
+        'AI_KIT_LOCAL_DRIVER' => 'openai-compatible',
+        'AI_KIT_LOCAL_URL' => 'http://localhost:11434/v1',
+        'AI_KIT_LOCAL_CHAT_MODEL' => 'llama3.2',
+        'AI_KIT_LOCAL_EMBED_MODEL' => 'nomic-embed-text',
+        'AI_KIT_LOCAL_EMBED_DIMENSIONS' => '768',
+        'AI_KIT_LOCAL_KEY' => 'secret',
+    ]);
+
+    expect($result)->toContain('AI_KIT_LOCAL_DRIVER=openai-compatible')
+        ->toContain('AI_KIT_LOCAL_URL=http://localhost:11434/v1')
+        ->toContain('AI_KIT_LOCAL_CHAT_MODEL=llama3.2')
+        ->toContain('AI_KIT_LOCAL_EMBED_MODEL=nomic-embed-text')
+        ->toContain('AI_KIT_LOCAL_EMBED_DIMENSIONS=768')
+        ->toContain('AI_KIT_LOCAL_KEY=secret');
+
+    $updated = InstallCommand::upsertEnv($result, [
+        'AI_KIT_LOCAL_URL' => 'http://localhost:8000/v1',
+    ]);
+
+    expect($updated)->toContain('AI_KIT_LOCAL_URL=http://localhost:8000/v1')
+        ->and(substr_count($updated, 'AI_KIT_LOCAL_URL='))->toBe(1);
+});
+
+it('documents the local provider keys in the env scaffold', function (): void {
+    $result = InstallCommand::withAiScaffold("APP_NAME=AiKit\n");
+
+    expect($result)->toContain('# AI_KIT_LOCAL_DRIVER=openai-compatible')
+        ->toContain('# AI_KIT_LOCAL_URL=http://localhost:11434/v1')
+        ->toContain('# AI_KIT_LOCAL_KEY=')
+        ->toContain('# AI_KIT_LOCAL_CHAT_MODEL=llama3.2')
+        ->toContain('# AI_KIT_LOCAL_EMBED_MODEL=nomic-embed-text')
+        ->toContain('# AI_KIT_LOCAL_EMBED_DIMENSIONS=768');
+});

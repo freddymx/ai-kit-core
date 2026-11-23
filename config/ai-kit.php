@@ -125,6 +125,35 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Local provider (OpenAI-compatible)
+    |--------------------------------------------------------------------------
+    |
+    | Set AI_KIT_CHAT_PROVIDER / AI_KIT_EMBED_PROVIDER to the sentinel "local"
+    | to route chat and/or embeddings through this on-demand provider. It works
+    | with Ollama, LM Studio, vLLM, llama.cpp — anything exposing an
+    | OpenAI-compatible HTTP API. "driver" may also be "ollama".
+    |
+    | These are the .env defaults; values saved from the Filament settings page
+    | are stored in ai_kit_settings and take precedence over them.
+    |
+    */
+    'providers' => [
+        'local' => [
+            'driver' => env('AI_KIT_LOCAL_DRIVER', 'openai-compatible'),
+            'url' => env('AI_KIT_LOCAL_URL', 'http://localhost:11434/v1'),
+            'key' => env('AI_KIT_LOCAL_KEY'),
+            'models' => [
+                'chat' => env('AI_KIT_LOCAL_CHAT_MODEL', 'llama3.2'),
+                'embeddings' => [
+                    'default' => env('AI_KIT_LOCAL_EMBED_MODEL', 'nomic-embed-text'),
+                    'dimensions' => (int) env('AI_KIT_LOCAL_EMBED_DIMENSIONS', 768),
+                ],
+            ],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Chunking
     |--------------------------------------------------------------------------
     |
@@ -192,6 +221,9 @@ return [
     'features' => [
         'dashboard' => (bool) env('AI_KIT_DASHBOARD', true),
         'token_usage' => (bool) env('AI_KIT_TOKEN_USAGE', true),
+        // Filament settings page (ai_kit_settings table) that edits the
+        // provider overrides resolved by AiProviderResolver.
+        'settings' => (bool) env('AI_KIT_SETTINGS', true),
         // Optional headless surfaces (off by default).
         'api' => (bool) env('AI_KIT_API', false),
         'mcp' => (bool) env('AI_KIT_MCP', false),

@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace SolutionForest\AiKit\Embeddings;
 
 use Laravel\Ai\Embeddings;
+use Laravel\Ai\Enums\Lab;
 use RuntimeException;
 use SolutionForest\AiKit\Contracts\Embedder;
+use SolutionForest\AiKit\Support\AiProviderResolver;
 use Throwable;
 
 /**
  * Embedder backed by the official Laravel AI SDK Embeddings API.
  *
- * Provider/model/dimensions come from config('ai-kit.embeddings.*'). Tests
- * bind a fake Embedder instead, and can also use Embeddings::fake().
+ * Provider/model/dimensions are resolved lazily from AiProviderResolver at
+ * call time (database overrides beat config), never in fromConfig()/the
+ * constructor — resolving during boot would break migrations. Tests bind a
+ * fake Embedder instead, and can also use Embeddings::fake().
  */
 final class AiSdkEmbedder implements Embedder
 {
@@ -37,9 +41,13 @@ final class AiSdkEmbedder implements Embedder
         );
     }
 
+    /**
+     * The effective embedding model — resolved lazily so DB overrides and the
+     * local provider are reflected in the model name stored on each chunk.
+     */
     public function model(): string
     {
-        return $this->model;
+        return app(AiProviderResolver::class)->embeddingsModel() ?? $this->model;
     }
 
     /**
@@ -52,15 +60,21 @@ final class AiSdkEmbedder implements Embedder
             return [];
         }
 
+        // Resolve at call time: no container/DB access at boot.
+        $resolver = app(AiProviderResolver::class);
+        $provider = $resolver->embeddingsProvider() ?? $this->resolveLab($this->provider);
+        $model = $resolver->embeddingsModel() ?? $this->model;
+        $dimensions = $resolver->embeddingsDimensions() ?? $this->dimensions;
+
         $builder = Embeddings::for(array_values($texts))
-            ->dimensions($this->dimensions)
+            ->dimensions($dimensions)
             ->timeout($this->timeout);
 
         if ($this->cache) {
             $builder = $builder->cache();
         }
 
-        $response = $this->generate($builder);
+        $response = $this->generate($builder, $provider, $model);
 
         return $this->normalise($response, count($texts));
     }
@@ -73,14 +87,10 @@ final class AiSdkEmbedder implements Embedder
         return $this->embed([$text])[0] ?? [];
     }
 
-    private function generate(object $builder): mixed
+    private function generate(object $builder, Lab|array|string|null $provider, ?string $model): mixed
     {
-        $lab = $this->resolveLab($this->provider);
-
         try {
-            return $lab !== null
-                ? $builder->generate($lab, $this->model)
-                : $builder->generate();
+            return $builder->generate($provider, $model);
         } catch (Throwable $e) {
             throw new RuntimeException("Embedding generation failed: {$e->getMessage()}", previous: $e);
         }
@@ -90,7 +100,7 @@ final class AiSdkEmbedder implements Embedder
      * Resolve a provider string to the SDK's Lab enum without hard-failing if
      * the enum's shape differs; null means "use the SDK default provider".
      */
-    private function resolveLab(string $provider): ?object
+    private function resolveLab(string $provider): ?Lab
     {
         $enum = 'Laravel\\Ai\\Enums\\Lab';
 

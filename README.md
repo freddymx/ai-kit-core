@@ -12,7 +12,7 @@
 - **Two vector drivers** behind one contract: **SQLite** (zero-infra, default) and **pgvector** (production).
 - **Two RAG modes** via one config flag: **tool** (agentic) and **inject** (classic).
 - **Ingest** PDF, Word (.docx), Excel (.xlsx), HTML, Markdown, plain text, **and URLs**.
-- **Provider-agnostic** — OpenAI, Anthropic, OpenRouter, Gemini, Groq, Mistral, … (anything the AI SDK supports).
+- **Provider-agnostic** — OpenAI, Anthropic, OpenRouter, Gemini, Groq, Mistral, … (anything the AI SDK supports), **plus local OpenAI-compatible servers** (Ollama, LM Studio, vLLM, llama.cpp).
 - **Fully testable offline** — no API keys needed in CI.
 
 ## Why ai-kit?
@@ -205,6 +205,52 @@ final class SupportAgent extends RagAgent
 
 Point `AI_KIT_AGENT=App\Ai\SupportAgent` at it. The default instructions are strict-grounded (search-first, refuse-if-unsupported, cite by document title).
 
+## Local language models
+
+Set the provider sentinel to `local` to run chat **and/or** embeddings against
+any OpenAI-compatible HTTP server: **Ollama, LM Studio, vLLM, llama.cpp**, etc.
+ai-kit builds an on-demand provider (`Ai::build()`) named `ai_kit_local` and
+hands it to the Laravel AI SDK — no `ai.providers.*` entry required.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AI_KIT_LOCAL_DRIVER` | `openai-compatible` | SDK driver: `openai-compatible` or `ollama` |
+| `AI_KIT_LOCAL_URL` | `http://localhost:11434/v1` | Base URL of the local server |
+| `AI_KIT_LOCAL_KEY` | _(none)_ | Optional API key / bearer token |
+| `AI_KIT_LOCAL_CHAT_MODEL` | `llama3.2` | Model used for chat completions |
+| `AI_KIT_LOCAL_EMBED_MODEL` | `nomic-embed-text` | Model used for embeddings |
+| `AI_KIT_LOCAL_EMBED_DIMENSIONS` | `768` | Vector dimensions (keep in sync with your migrations) |
+
+Ollama example:
+
+```dotenv
+AI_KIT_CHAT_PROVIDER=local
+AI_KIT_EMBED_PROVIDER=local
+AI_KIT_LOCAL_URL=http://localhost:11434/v1
+AI_KIT_LOCAL_CHAT_MODEL=llama3.2
+AI_KIT_LOCAL_EMBED_MODEL=nomic-embed-text
+AI_KIT_LOCAL_EMBED_DIMENSIONS=768
+```
+
+Chat and embeddings resolve independently, so you can keep a hosted provider
+for chat and use a local model only for embeddings (or vice versa):
+
+```dotenv
+AI_KIT_CHAT_PROVIDER=anthropic
+AI_KIT_EMBED_PROVIDER=local
+```
+
+**Database overrides:** each of these values can also be saved in the
+`ai_kit_settings` table from the **Filament plugin's AI settings page**. A
+non-null database value always wins over the `.env` default; the optional
+`AI_KIT_SETTINGS` flag controls whether the Filament plugin exposes that page.
+`AiProviderResolver::reset()`
+deletes the row and returns everything to `.env`.
+
+The PHP classes still live in the `SolutionForest\AiKit\` namespace —
+`SolutionForest\AiKit\Support\AiProviderResolver` and
+`SolutionForest\AiKit\Support\AiSettings`. No `use` statements need changing.
+
 ## Conversation persistence & token usage
 
 When a prompt runs **for an authenticated participant** (`->forUser($user)` / `->continue($id, $user)`), the AI SDK persists the exchange to `agent_conversations` / `agent_conversation_messages`, **including per-message token usage**. Aggregate it with `UsageStats`:
@@ -272,7 +318,7 @@ Enable with `AI_KIT_TENANCY=true`.
 
 ## Configuration reference
 
-`config/ai-kit.php`: `mode`, `default_collection`, `agent` (class + instructions), `chat` (provider/model/fallback/streaming), `embeddings` (provider/model/dimensions/cache/timeout), `chunking` (size/overlap), `retrieval` (driver/top_k/min_score/sqlite/pgvector), `ingestion` (queue/embed_batch), `tenancy`, `database` (connection/prefix), `features` (dashboard/token_usage), `pricing`. Every value has an `env()` override.
+`config/ai-kit.php`: `mode`, `default_collection`, `agent` (class + instructions), `chat` (provider/model/fallback/streaming), `embeddings` (provider/model/dimensions/cache/timeout), `providers.local` (driver/url/key/models — see [Local language models](#local-language-models)), `chunking` (size/overlap), `retrieval` (driver/top_k/min_score/sqlite/pgvector), `ingestion` (queue/embed_batch), `tenancy`, `database` (connection/prefix), `features` (dashboard/token_usage/settings), `pricing`. Every value has an `env()` override.
 
 ## Commands
 

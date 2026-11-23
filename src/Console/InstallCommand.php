@@ -79,6 +79,9 @@ final class InstallCommand extends Command
         'deepseek' => 'deepseek-chat',
         'xai' => 'grok-4',
         'ollama' => 'llama3.2',
+        'openai-compatible' => 'llama3.2',
+        // Sentinel: routes through ai-kit's on-demand local provider.
+        'local' => 'llama3.2',
     ];
 
     /**
@@ -93,6 +96,32 @@ final class InstallCommand extends Command
         'cohere' => 'embed-english-v3.0',
         'gemini' => 'gemini-embedding-001',
         'mistral' => 'mistral-embed',
+        'ollama' => 'nomic-embed-text',
+        'openai-compatible' => 'nomic-embed-text',
+        // Sentinel: routes through ai-kit's on-demand local provider.
+        'local' => 'nomic-embed-text',
+    ];
+
+    /**
+     * Selections that mean "a local server". They are normalised to the
+     * `local` sentinel in .env so AiProviderResolver builds the on-demand
+     * provider with the chosen driver.
+     *
+     * @var list<string>
+     */
+    private const LOCAL_PROVIDERS = ['local', 'ollama', 'openai-compatible'];
+
+    /** @var array<string, string> */
+    private const LOCAL_DRIVER_BY_PROVIDER = [
+        'local' => 'openai-compatible',
+        'ollama' => 'ollama',
+        'openai-compatible' => 'openai-compatible',
+    ];
+
+    /** @var array<string, string> */
+    private const LOCAL_URL_BY_DRIVER = [
+        'ollama' => 'http://localhost:11434',
+        'openai-compatible' => 'http://localhost:11434/v1',
     ];
 
     /**
@@ -136,6 +165,15 @@ final class InstallCommand extends Command
         # OPENAI_API_KEY=
         # ANTHROPIC_API_KEY=
         # OPENROUTER_API_KEY=
+
+        # ---- Local models: Ollama, LM Studio, vLLM, llama.cpp ----
+        # Set AI_KIT_CHAT_PROVIDER / AI_KIT_EMBED_PROVIDER to "local" to use them.
+        # AI_KIT_LOCAL_DRIVER=openai-compatible
+        # AI_KIT_LOCAL_URL=http://localhost:11434/v1
+        # AI_KIT_LOCAL_KEY=
+        # AI_KIT_LOCAL_CHAT_MODEL=llama3.2
+        # AI_KIT_LOCAL_EMBED_MODEL=nomic-embed-text
+        # AI_KIT_LOCAL_EMBED_DIMENSIONS=768
         ENV;
 
     /**
@@ -189,7 +227,10 @@ final class InstallCommand extends Command
             default: 'openai',
         );
         $embedModel = text('Embedding model?', default: self::EMBED_DEFAULTS[$embedProvider] ?? '');
-        $embedDimensions = text('Embedding dimensions?', default: '1536');
+        $embedDimensions = text(
+            'Embedding dimensions?',
+            default: in_array($embedProvider, self::LOCAL_PROVIDERS, true) ? '768' : '1536',
+        );
 
         $pairs = [
             'AI_KIT_CHAT_PROVIDER' => $chatProvider,
@@ -198,6 +239,8 @@ final class InstallCommand extends Command
             'AI_KIT_EMBED_MODEL' => $embedModel,
             'AI_KIT_EMBED_DIMENSIONS' => $embedDimensions,
         ];
+
+        $this->configureLocalProvider($chatProvider, $embedProvider, $chatModel, $embedModel, $pairs);
 
         $envPath = base_path('.env');
         $contents = File::exists($envPath) ? File::get($envPath) : '';
@@ -229,6 +272,69 @@ final class InstallCommand extends Command
 
         File::put($envPath, self::upsertEnv($contents, $pairs));
         $this->components->task('Wrote AI provider settings to .env');
+    }
+
+    /**
+     * Ask for the shared local-server settings when either side is local and
+     * write the AI_KIT_LOCAL_* keys. The provider selection is normalised to
+     * the `local` sentinel so AiProviderResolver builds the on-demand provider
+     * with the chosen driver.
+     *
+     * @param  array<string, string>  $pairs
+     */
+    private function configureLocalProvider(
+        string $chatProvider,
+        string $embedProvider,
+        string $chatModel,
+        string $embedModel,
+        array &$pairs,
+    ): void {
+        $local = array_values(array_filter(
+            [$chatProvider, $embedProvider],
+            fn (string $provider): bool => in_array($provider, self::LOCAL_PROVIDERS, true),
+        ));
+
+        if ($local === []) {
+            return;
+        }
+
+        $driver = select(
+            'Which local server driver?',
+            array_keys(self::LOCAL_URL_BY_DRIVER),
+            default: self::LOCAL_DRIVER_BY_PROVIDER[$local[0]] ?? 'openai-compatible',
+        );
+        $url = text(
+            'Local server URL?',
+            default: self::LOCAL_URL_BY_DRIVER[$driver] ?? self::LOCAL_URL_BY_DRIVER['openai-compatible'],
+        );
+        $localChatModel = text(
+            'Local chat model?',
+            default: in_array($chatProvider, self::LOCAL_PROVIDERS, true) ? $chatModel : (self::CHAT_DEFAULTS['local'] ?? 'llama3.2'),
+        );
+        $localEmbeddingsModel = text(
+            'Local embedding model?',
+            default: in_array($embedProvider, self::LOCAL_PROVIDERS, true) ? $embedModel : (self::EMBED_DEFAULTS['local'] ?? 'nomic-embed-text'),
+        );
+        $localDimensions = text('Local embedding dimensions?', default: '768');
+        $localKey = password('Local API key? (optional — leave blank for servers without auth)');
+
+        $pairs['AI_KIT_LOCAL_DRIVER'] = $driver;
+        $pairs['AI_KIT_LOCAL_URL'] = $url;
+        $pairs['AI_KIT_LOCAL_CHAT_MODEL'] = $localChatModel;
+        $pairs['AI_KIT_LOCAL_EMBED_MODEL'] = $localEmbeddingsModel;
+        $pairs['AI_KIT_LOCAL_EMBED_DIMENSIONS'] = $localDimensions;
+
+        if ($localKey !== '' && $localKey !== null) {
+            $pairs['AI_KIT_LOCAL_KEY'] = $localKey;
+        }
+
+        if (in_array($chatProvider, self::LOCAL_PROVIDERS, true)) {
+            $pairs['AI_KIT_CHAT_PROVIDER'] = 'local';
+        }
+
+        if (in_array($embedProvider, self::LOCAL_PROVIDERS, true)) {
+            $pairs['AI_KIT_EMBED_PROVIDER'] = 'local';
+        }
     }
 
     /**

@@ -37,6 +37,7 @@ use SolutionForest\AiKit\Extraction\PlainTextExtractor;
 use SolutionForest\AiKit\Extraction\WordExtractor;
 use SolutionForest\AiKit\Retrieval\PgVectorRetriever;
 use SolutionForest\AiKit\Retrieval\SqliteVecRetriever;
+use SolutionForest\AiKit\Support\AiProviderResolver;
 
 final class AiKitServiceProvider extends ServiceProvider
 {
@@ -45,6 +46,8 @@ final class AiKitServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/../config/ai-kit.php', 'ai-kit');
 
         $this->app->singleton(AiKit::class);
+
+        $this->app->singleton(AiProviderResolver::class);
 
         $this->app->singleton(Embedder::class, fn (): Embedder => AiSdkEmbedder::fromConfig());
 
