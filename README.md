@@ -100,7 +100,7 @@ references need updating.
 
 ```bash
 composer remove solution-forest/ai-kit-core
-composer require freddymx/ai-kit-core:^0.3
+composer require freddymx/ai-kit-core:^0.4
 ```
 
 The old package remains on Packagist at v0.2.x for existing installations.
