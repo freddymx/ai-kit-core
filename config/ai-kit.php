@@ -224,6 +224,11 @@ return [
         // Filament settings page (ai_kit_settings table) that edits the
         // provider overrides resolved by AiProviderResolver.
         'settings' => (bool) env('AI_KIT_SETTINGS', true),
+        // Publish the effective provider to the AI SDK's ai.default and
+        // ai.default_for_embeddings. Turn off if the SDK is used for other work
+        // that must keep its own defaults. ai-kit.chat/embeddings config and
+        // ai.providers.local are always published.
+        'apply_to_sdk' => (bool) env('AI_KIT_APPLY_TO_SDK', true),
         // Optional headless surfaces (off by default).
         'api' => (bool) env('AI_KIT_API', false),
         'mcp' => (bool) env('AI_KIT_MCP', false),

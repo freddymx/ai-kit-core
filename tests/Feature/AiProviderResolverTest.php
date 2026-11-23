@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Schema;
 use Laravel\Ai\Contracts\Providers\Provider;
 use RuntimeException;
 use SolutionForest\AiKit\Agents\RagAgent;
+use SolutionForest\AiKit\AiKitServiceProvider;
 use SolutionForest\AiKit\Embeddings\AiSdkEmbedder;
 use SolutionForest\AiKit\Support\AiProviderResolver;
 use SolutionForest\AiKit\Support\AiSettings;
@@ -152,4 +153,130 @@ it('is tolerant when the settings table does not exist', function (): void {
         ->and(resolver()->effective()['source'])->toBe('env');
 
     resolver()->reset();
+});
+
+it('applies database overrides to config() and the SDK local provider', function (): void {
+    resolver()->save([
+        'chat_provider' => 'local',
+        'chat_model' => 'gpt-5',
+        'embeddings_provider' => 'local',
+        'embeddings_model' => 'Qwen3-Embedding-4B-GGUF',
+        'embeddings_dimensions' => 768,
+        'local_driver' => 'openai-compatible',
+        'local_url' => 'http://100.103.128.28/v1',
+        'local_key' => 'super-secret-key',
+        'local_chat_model' => 'Gemma-4-E4B-it-GGUF',
+        'local_embeddings_model' => 'Qwen3-Embedding-4B-GGUF',
+        'local_embeddings_dimensions' => 768,
+    ]);
+
+    resolver()->applyToConfig();
+
+    expect(config('ai-kit.chat.provider'))->toBe('local')
+        ->and(config('ai-kit.chat.model'))->toBe('gpt-5')
+        ->and(config('ai-kit.embeddings.provider'))->toBe('local')
+        ->and(config('ai-kit.embeddings.model'))->toBe('Qwen3-Embedding-4B-GGUF')
+        ->and(config('ai-kit.embeddings.dimensions'))->toBe(768)
+        ->and(config('ai.providers.local.driver'))->toBe('openai-compatible')
+        ->and(config('ai.providers.local.url'))->toBe('http://100.103.128.28/v1')
+        ->and(config('ai.providers.local.key'))->toBe('super-secret-key')
+        ->and(config('ai.providers.local.models.text.default'))->toBe('Gemma-4-E4B-it-GGUF')
+        ->and(config('ai.providers.local.models.embeddings.default'))->toBe('Qwen3-Embedding-4B-GGUF')
+        ->and(config('ai.providers.local.models.embeddings.dimensions'))->toBe(768)
+        ->and(config('ai.default'))->toBe('local')
+        ->and(config('ai.default_for_embeddings'))->toBe('local');
+});
+
+it('leaves the SDK defaults alone when apply_to_sdk is disabled', function (): void {
+    config()->set('ai.default', 'openai');
+    config()->set('ai.default_for_embeddings', 'openai');
+    config()->set('ai-kit.features.apply_to_sdk', false);
+
+    resolver()->save([
+        'chat_provider' => 'local',
+        'embeddings_provider' => 'local',
+        'local_url' => 'http://127.0.0.1:8080/v1',
+    ]);
+    resolver()->applyToConfig();
+
+    expect(config('ai.default'))->toBe('openai')
+        ->and(config('ai.default_for_embeddings'))->toBe('openai')
+        ->and(config('ai-kit.chat.provider'))->toBe('local')
+        ->and(config('ai.providers.local.url'))->toBe('http://127.0.0.1:8080/v1');
+});
+
+it('writes the real local key to config but keeps effective() masked', function (): void {
+    resolver()->save([
+        'local_url' => 'http://127.0.0.1:8080/v1',
+        'local_key' => 'super-secret-key',
+    ]);
+    resolver()->applyToConfig();
+
+    expect(config('ai.providers.local.key'))->toBe('super-secret-key')
+        ->and(resolver()->effective()['local_key'])->toBe('supe********')
+        ->and(json_encode(resolver()->effective(), JSON_THROW_ON_ERROR))->not->toContain('super-secret-key');
+});
+
+it('does not register a partial local provider without a URL', function (): void {
+    config()->set('ai.providers.local', null);
+    resolver()->save(['chat_provider' => 'local']);
+    config()->set('ai-kit.providers.local.url', null);
+
+    resolver()->applyToConfig();
+
+    expect(config('ai.providers.local'))->toBeNull()
+        ->and(config('ai-kit.chat.provider'))->toBe('local');
+});
+
+it('restores the env-backed config after reset in the same process', function (): void {
+    $envProvider = config('ai-kit.chat.provider');
+    $envLocalUrl = config('ai.providers.local.url');
+
+    resolver()->save([
+        'chat_provider' => 'local',
+        'local_url' => 'http://192.0.2.20/v1',
+    ]);
+    resolver()->applyToConfig();
+
+    expect(config('ai-kit.chat.provider'))->toBe('local');
+
+    resolver()->reset();
+    resolver()->applyToConfig();
+
+    expect(config('ai-kit.chat.provider'))->toBe($envProvider)
+        ->and(config('ai.providers.local.url'))->toBe($envLocalUrl)
+        ->and(config('ai.default'))->toBe($envProvider);
+});
+
+it('does not bake database values into the config cache', function (): void {
+    $originalArgv = $_SERVER['argv'] ?? null;
+    $envProvider = config('ai-kit.chat.provider');
+    $envLocalUrl = config('ai.providers.local.url');
+
+    resolver()->save([
+        'chat_provider' => 'local',
+        'local_url' => 'http://192.0.2.10/v1',
+    ]);
+
+    try {
+        // ConfigCacheCommand boots a fresh app in the same process, with the
+        // original artisan argv still in $_SERVER.
+        $_SERVER['argv'] = ['artisan', 'config:cache'];
+        (new AiKitServiceProvider($this->app))->boot();
+
+        expect(config('ai-kit.chat.provider'))->toBe($envProvider)
+            ->and(config('ai.providers.local.url'))->toBe($envLocalUrl);
+    } finally {
+        if ($originalArgv === null) {
+            unset($_SERVER['argv']);
+        } else {
+            $_SERVER['argv'] = $originalArgv;
+        }
+    }
+
+    // The row is still there and a normal request does apply it.
+    resolver()->applyToConfig();
+
+    expect(config('ai-kit.chat.provider'))->toBe('local')
+        ->and(config('ai.providers.local.url'))->toBe('http://192.0.2.10/v1');
 });

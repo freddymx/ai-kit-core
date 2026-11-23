@@ -38,6 +38,7 @@ use SolutionForest\AiKit\Extraction\WordExtractor;
 use SolutionForest\AiKit\Retrieval\PgVectorRetriever;
 use SolutionForest\AiKit\Retrieval\SqliteVecRetriever;
 use SolutionForest\AiKit\Support\AiProviderResolver;
+use Throwable;
 
 final class AiKitServiceProvider extends ServiceProvider
 {
@@ -100,9 +101,32 @@ final class AiKitServiceProvider extends ServiceProvider
         // Load migrations for tests / auto-discovery; publishing lets apps own them.
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
 
+        // The database is the source of truth for ai-kit.* and the SDK's local
+        // provider. Never do this while config:cache boots providers: it would
+        // serialize DB values into bootstrap/cache/config.php, where they would
+        // stay stale after the settings page changes. ConfigCacheCommand boots
+        // a fresh app in-process, so the original argv is still available.
+        if (! $this->isConfigCacheCommand()) {
+            try {
+                $this->app->make(AiProviderResolver::class)->applyToConfig();
+            } catch (Throwable) {
+                // A missing settings table (migrations not run yet) or an
+                // unavailable DB must never prevent the app from booting.
+            }
+        }
+
         $this->registerConversationStore();
         $this->registerApiRoutes();
         $this->registerMcpServer();
+    }
+
+    private function isConfigCacheCommand(): bool
+    {
+        if (! $this->app->runningInConsole()) {
+            return false;
+        }
+
+        return in_array('config:cache', array_slice($_SERVER['argv'] ?? [], 1), true);
     }
 
     /**

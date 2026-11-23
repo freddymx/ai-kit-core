@@ -209,8 +209,12 @@ Point `AI_KIT_AGENT=App\Ai\SupportAgent` at it. The default instructions are str
 
 Set the provider sentinel to `local` to run chat **and/or** embeddings against
 any OpenAI-compatible HTTP server: **Ollama, LM Studio, vLLM, llama.cpp**, etc.
-ai-kit builds an on-demand provider (`Ai::build()`) named `ai_kit_local` and
-hands it to the Laravel AI SDK — no `ai.providers.*` entry required.
+ai-kit hands the SDK an on-demand provider (`Ai::build()`) named `ai_kit_local`
+for its own agent/embedder, and also publishes the effective settings into
+`config('ai-kit.*')` plus an `ai.providers.local` entry so **direct SDK calls**
+(`Ai::text()`, `Ai::embeddings()`) and code reading config see the same server.
+The SDK reads `models.text.default` / `models.embeddings.default` for calls that
+don't pass a model explicitly.
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -240,12 +244,26 @@ AI_KIT_CHAT_PROVIDER=anthropic
 AI_KIT_EMBED_PROVIDER=local
 ```
 
-**Database overrides:** each of these values can also be saved in the
-`ai_kit_settings` table from the **Filament plugin's AI settings page**. A
-non-null database value always wins over the `.env` default; the optional
-`AI_KIT_SETTINGS` flag controls whether the Filament plugin exposes that page.
-`AiProviderResolver::reset()`
-deletes the row and returns everything to `.env`.
+**Database overrides (the source of truth):** each of these values can also be
+saved in the `ai_kit_settings` table from the **Filament plugin's AI settings
+page**. A non-null database value always wins over `config/ai-kit.php` and
+`.env`. On every request `AiProviderResolver::applyToConfig()` copies the
+effective values into `config('ai-kit.chat.*')`, `config('ai-kit.embeddings.*')`
+and `config('ai.providers.local')` (URL, key, text and embeddings models), so
+the database wins even when the app uses the AI SDK directly. It also sets the
+SDK's `ai.default` and `ai.default_for_embeddings`; set
+`AI_KIT_APPLY_TO_SDK=false` to keep those two SDK-wide defaults untouched (the
+`ai-kit.*` config and `ai.providers.local` are still published). The optional
+`AI_KIT_SETTINGS` flag controls whether the Filament page is exposed.
+`AiProviderResolver::reset()` (or the page's **Reset to .env**) deletes the row
+and returns everything to `.env`.
+
+> `php artisan config:cache` deliberately skips this DB → config step: booting
+> providers during config caching would bake database values into the cached
+> config file, where they would go stale after a settings change.
+
+The local key is written to `ai.providers.local.key` in plaintext because the
+SDK needs it — `AiProviderResolver::effective()` still masks it for UIs/logs.
 
 The PHP classes still live in the `SolutionForest\AiKit\` namespace —
 `SolutionForest\AiKit\Support\AiProviderResolver` and
@@ -318,7 +336,7 @@ Enable with `AI_KIT_TENANCY=true`.
 
 ## Configuration reference
 
-`config/ai-kit.php`: `mode`, `default_collection`, `agent` (class + instructions), `chat` (provider/model/fallback/streaming), `embeddings` (provider/model/dimensions/cache/timeout), `providers.local` (driver/url/key/models — see [Local language models](#local-language-models)), `chunking` (size/overlap), `retrieval` (driver/top_k/min_score/sqlite/pgvector), `ingestion` (queue/embed_batch), `tenancy`, `database` (connection/prefix), `features` (dashboard/token_usage/settings), `pricing`. Every value has an `env()` override.
+`config/ai-kit.php`: `mode`, `default_collection`, `agent` (class + instructions), `chat` (provider/model/fallback/streaming), `embeddings` (provider/model/dimensions/cache/timeout), `providers.local` (driver/url/key/models — see [Local language models](#local-language-models)), `chunking` (size/overlap), `retrieval` (driver/top_k/min_score/sqlite/pgvector), `ingestion` (queue/embed_batch), `tenancy`, `database` (connection/prefix), `features` (dashboard/token_usage/settings/apply_to_sdk), `pricing`. Every value has an `env()` override.
 
 ## Commands
 
