@@ -70,7 +70,7 @@ another service hits the API, or an AI agent connects over MCP.
 ## Install
 
 ```bash
-composer require solution-forest/ai-kit-core
+composer require freddymx/ai-kit-core
 php artisan ai-kit:install
 ```
 
@@ -90,6 +90,20 @@ AI_KIT_EMBED_PROVIDER=openai
 AI_KIT_EMBED_MODEL=text-embedding-3-small
 OPENAI_API_KEY=sk-...
 ```
+
+## Migrating from `solution-forest/ai-kit-core`
+
+Versions up to 0.2 were published as `solution-forest/ai-kit-core`. From 0.3 on,
+the package is published as `freddymx/ai-kit-core`. The PHP namespace
+`SolutionForest\AiKit\` is unchanged — no `use` statements or config class
+references need updating.
+
+```bash
+composer remove solution-forest/ai-kit-core
+composer require freddymx/ai-kit-core:^0.3
+```
+
+The old package remains on Packagist at v0.2.x for existing installations.
 
 ## Quick start
 
@@ -232,8 +246,8 @@ What ai-kit itself changed:
   repaired by the SDK on the next run.
 
 The UI packages have their own short upgrade notes:
-[ai-kit-ui-livewire](https://github.com/solutionforest/ai-kit-ui-livewire#upgrading-from-ai-kit-02)
-and [ai-kit-filament](https://github.com/solutionforest/ai-kit-filament#upgrading-from-ai-kit-02).
+[ai-kit-ui-livewire](https://github.com/freddymx/ai-kit-ui-livewire#upgrading-from-ai-kit-02)
+and [ai-kit-filament](https://github.com/freddymx/ai-kit-filament#upgrading-from-ai-kit-02).
 
 ## Multi-tenancy
 
@@ -381,16 +395,17 @@ call the same service layer (`ChatService`, `CollectionService`,
 
 | Package | Purpose |
 | --- | --- |
-| **solution-forest/ai-kit-core** (this) | Ingestion, retrieval, agents + CLI, HTTP API, MCP |
-| [solution-forest/ai-kit-ui-livewire](https://github.com/solutionforest/ai-kit-ui-livewire) | Livewire 4 chat component |
-| [solution-forest/ai-kit-filament](https://github.com/solutionforest/ai-kit-filament) | Filament v5 admin panel |
+| **freddymx/ai-kit-core** (this) | Ingestion, retrieval, agents + CLI, HTTP API, MCP |
+| [freddymx/ai-kit-ui-livewire](https://github.com/freddymx/ai-kit-ui-livewire) | Livewire 4 chat component |
+| [freddymx/ai-kit-filament](https://github.com/freddymx/ai-kit-filament) | Filament v5 admin panel |
 
 `ai-kit-ui-livewire` and `ai-kit-filament` are optional; core is fully usable headless.
 
 ## Author
 
-Created and maintained by **Alfredo Pineda** (<freddy@canariasnetworks.com>),
-published under the [SolutionForest](https://www.solutionforest.com) organization.
+Created and maintained by **Alfredo Pineda** (<freddy@canariasnetworks.com>).
+Originally published under the [SolutionForest](https://www.solutionforest.com)
+organization; from 0.3 on, published in the `freddymx` Packagist namespace.
 
 ## License
 

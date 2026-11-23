@@ -1,5 +1,5 @@
 {
-    "name": "solution-forest/ai-kit-core",
+    "name": "freddymx/ai-kit-core",
     "description": "Core of ai-kit: document ingestion, chunking, extraction, vector retrieval (sqlite-vec + pgvector), and RAG agents built on the official Laravel AI SDK.",
     "type": "library",
     "license": "MIT",
