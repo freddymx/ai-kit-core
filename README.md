@@ -207,6 +207,11 @@ Cost is estimated from `config('ai-kit.pricing')` ($ per 1M tokens, per model) u
 
 ## Upgrading from ai-kit 0.2 (AI SDK 0.x → 1.x)
 
+ai-kit **0.3** is a breaking release across the whole suite: PHP **8.5+**,
+`laravel/ai` **^1.4**, `laravel/mcp` **^1.0** (when MCP is enabled), Pest **5**,
+sibling packages at `^0.3`, and `dev-main` aliased to `0.3.x-dev`. Upgrade
+`ai-kit-core`, `ai-kit-ui-livewire` and `ai-kit-filament` together.
+
 The Laravel AI SDK **1.0** changed how conversations are stored. If your app already
 persists conversations, the SDK's own migration will not run again — publish and run
 the backfill migration from the [AI SDK upgrade guide](https://github.com/laravel/ai/blob/1.x/UPGRADE.md)
@@ -222,6 +227,13 @@ What ai-kit itself changed:
   instead of `user_id`.
 - Token usage is read from the SDK's `input_tokens` / `output_tokens` keys; rows
   written by the old SDK (`prompt_tokens` / `completion_tokens`) are still counted.
+- `ConsistentConversationStore` now builds on the SDK's `steps` model: an
+  unanswered tool call is no longer persisted, and already-stored history is
+  repaired by the SDK on the next run.
+
+The UI packages have their own short upgrade notes:
+[ai-kit-ui-livewire](https://github.com/solutionforest/ai-kit-ui-livewire#upgrading-from-ai-kit-02)
+and [ai-kit-filament](https://github.com/solutionforest/ai-kit-filament#upgrading-from-ai-kit-02).
 
 ## Multi-tenancy
 
@@ -375,6 +387,11 @@ call the same service layer (`ChatService`, `CollectionService`,
 
 `ai-kit-ui-livewire` and `ai-kit-filament` are optional; core is fully usable headless.
 
+## Author
+
+Created and maintained by **Alfredo Pineda** (<freddy@canariasnetworks.com>),
+published under the [SolutionForest](https://www.solutionforest.com) organization.
+
 ## License
 
-MIT © [SolutionForest](https://www.solutionforest.com)
+MIT © [SolutionForest](https://www.solutionforest.com), Alfredo Pineda

@@ -3,6 +3,13 @@
     "description": "Core of ai-kit: document ingestion, chunking, extraction, vector retrieval (sqlite-vec + pgvector), and RAG agents built on the official Laravel AI SDK.",
     "type": "library",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Alfredo Pineda",
+            "email": "freddy@canariasnetworks.com",
+            "role": "Developer"
+        }
+    ],
     "keywords": ["laravel", "ai", "rag", "chatbot", "pgvector", "sqlite-vec", "embeddings"],
     "require": {
         "php": "^8.5",
