@@ -156,6 +156,8 @@ Los repos hermanos viven al mismo nivel: `../ai-kit-ui-livewire` y `../ai-kit-fi
 | `ai-kit:conversation {action=list\|show} {id?} {--json}` | Log de conversaciones + tokens |
 | `ai-kit:stats {--days=30} {--json}` | Docs/chunks/tokens/costo |
 
+**Borrado de conversaciones:** `ConversationService` (singleton en `register()`) expone `delete($id, ?$type, $key)`, `deleteForParticipant($id, $participant)` y `deleteAllForParticipant($participant)`. Con `participantType` no null, delega la verificación de propiedad en `conversationBelongsTo()` del store del SDK y devuelve `false` sin borrar si el participante no es dueño. `delete()` envuelve el borrado en una transacción sobre la conexión del modelo.
+
 **Ingest sync vs queued:** en CLI la ingesta corre **sync por defecto**; `--queue` la manda a la cola. A nivel de API, `IngestionService` hace default queued (chained `ExtractText → ChunkDocument → EmbedChunks` en la conexión `AI_KIT_QUEUE`) y `sync: true` ejecuta inline. En modo queued el documento pasa por `pending → processing → indexed`, o `failed` con `failure_reason` ante errores (`DocumentStatus` en `src/Enums/`).
 
 ## 9. Decisiones de diseño y gotchas
@@ -171,13 +173,15 @@ Los repos hermanos viven al mismo nivel: `../ai-kit-ui-livewire` y `../ai-kit-fi
 - **Error si falta URL:** `buildLocalProvider()` tira `RuntimeException` indicando configurar `AI_KIT_LOCAL_URL` o el campo "Local URL" de Filament; no hay default silencioso para el provider on-demand.
 - **Reindexado detectable por embedding model:** cada chunk guarda `embedding_model`; cambiar `AI_KIT_EMBED_MODEL` no invalida lo ya indexado silenciosamente. `ai-kit:document reindex {id}` permite re-embedder de forma explícita.
 - **SDK 1.x:** las conversaciones se scoping por `participant_type` / `participant_id` (ya no `user_id`), y `ConsistentConversationStore` se basa en la columna `steps` del SDK. Un tool call sin respuesta no se persiste; el SDK repara el historial en el siguiente run.
+- **Borrado sin FK cascade:** la migración del SDK no pone `ON DELETE CASCADE` en `agent_conversation_messages.conversation_id`. `AiKitServiceProvider::boot()` registra `Conversation::deleting()` para borrar los mensajes con `ConversationMessage::query()->where('conversation_id', ...)->delete()`. Así cualquier `->delete()` del modelo (servicio, Filament, código de app) limpia los mensajes; el servicio solo borra la conversación y confía en el evento, evitando un doble borrado.
+- **Propiedad en el borrado:** `conversationBelongsTo()` NO está en el contrato `ConversationStore` del SDK, sino en `Laravel\Ai\Contracts\VerifiesConversationOwnership` (implementado por `DatabaseConversationStore`). `ConversationService` comprueba `instanceof` antes de llamarlo: un store custom que solo implemente `ConversationStore` no puede acreditar propiedad y por eso no se le permite borrar.
 - **Token usage compat:** se leen `input_tokens` / `output_tokens` del SDK 1.x, con fallback a `prompt_tokens` / `completion_tokens` de filas escritas por 0.x (`UsageStats`).
 
 ## 10. Verificación y publicación
 
 Checklist antes de publicar:
 
-1. `vendor/bin/pest` en el paquete (y en los hermanos si el cambio es transversal) — 97 passed / 355 assertions en el estado actual.
+1. `vendor/bin/pest` en el paquete (y en los hermanos si el cambio es transversal) — 105 passed / 384 assertions en el estado actual.
 2. `composer validate` (sin errores).
 3. Revisar que `features.api` / `features.mcp` siguen funcionando con los flags en `false` y `true`.
 4. Tag semver en 0.x: **patch** para fixes (`0.4.3 → 0.4.4`), **minor** para features (`0.4.3 → 0.5.0`); recordar actualizar `branch-alias` y las constraints `^0.4` de los hermanos cuando corresponda.

@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Models\Conversation;
+use Laravel\Ai\Models\ConversationMessage;
 use Laravel\Ai\Storage\DatabaseConversationStore;
 use SolutionForest\AiKit\Mcp\AiKitServer;
 use SolutionForest\AiKit\Chunking\RecursiveTextChunker;
@@ -37,6 +39,7 @@ use SolutionForest\AiKit\Extraction\PlainTextExtractor;
 use SolutionForest\AiKit\Extraction\WordExtractor;
 use SolutionForest\AiKit\Retrieval\PgVectorRetriever;
 use SolutionForest\AiKit\Retrieval\SqliteVecRetriever;
+use SolutionForest\AiKit\Services\ConversationService;
 use SolutionForest\AiKit\Support\AiProviderResolver;
 use Throwable;
 
@@ -49,6 +52,8 @@ final class AiKitServiceProvider extends ServiceProvider
         $this->app->singleton(AiKit::class);
 
         $this->app->singleton(AiProviderResolver::class);
+
+        $this->app->singleton(ConversationService::class);
 
         $this->app->singleton(Embedder::class, fn (): Embedder => AiSdkEmbedder::fromConfig());
 
@@ -116,6 +121,7 @@ final class AiKitServiceProvider extends ServiceProvider
         }
 
         $this->registerConversationStore();
+        $this->registerConversationDeletion();
         $this->registerApiRoutes();
         $this->registerMcpServer();
     }
@@ -155,6 +161,22 @@ final class AiKitServiceProvider extends ServiceProvider
         $this->app->singleton(ConversationStore::class, fn (): ConversationStore => new ConsistentConversationStore(
             config('ai.conversations.connection'),
         ));
+    }
+
+    /**
+     * The SDK's conversation migration has no ON DELETE CASCADE on
+     * agent_conversation_messages.conversation_id. Deleting a conversation via
+     * Eloquent (from ConversationService, Filament, or app code) must therefore
+     * remove its messages explicitly; this observer makes that true for every
+     * delete path, not just the ones that go through our service.
+     */
+    private function registerConversationDeletion(): void
+    {
+        Conversation::deleting(function (Conversation $conversation): void {
+            ConversationMessage::query()
+                ->where('conversation_id', $conversation->getKey())
+                ->delete();
+        });
     }
 
     /**

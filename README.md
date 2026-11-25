@@ -283,7 +283,9 @@ app(UsageStats::class)->daily(14);             // per-day token series
 app(UsageStats::class)->conversationTokens($id);
 ```
 
-Cost is estimated from `config('ai-kit.pricing')` ($ per 1M tokens, per model) using the active chat model's rate.
+Delete a thread programmatically through `SolutionForest\AiKit\Services\ConversationService`: `app(ConversationService::class)->delete($id)` removes the conversation and its messages, and `deleteForParticipant($id, $user)` / `delete($id, $type, $key)` refuse to delete when the participant does not own it.
+
+The SDK's conversation store has no delete method and its migration does not cascade on `conversation_id`, so the service provider registers an Eloquent `deleting` observer on `Conversation` that clears the messages for every delete path (including Filament).
 
 ## Upgrading from ai-kit 0.2 (AI SDK 0.x → 1.x)
 
