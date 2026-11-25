@@ -42,7 +42,9 @@ La salida es un mismo agente con **dos herramientas complementarias**: recuperac
 - El sistema SHALL inyectar el scope de tenant en la capa de datos, nunca desde un parámetro del modelo.
 
 ### `structured-connection` (nueva)
-- El administrador SHALL poder configurar la conexión (named connection o detalles inline) y la política (max rows, timeout, columna tenant) desde Filament.
+- El administrador SHALL poder configurar la conexión y la política (max rows, timeout, columna tenant) desde Filament.
+- La opción principal SHALL ser un nombre de conexión existente en `config/database.php`; los detalles SHALL mostrarse solo lectura, sin secretos.
+- Las credenciales inline SHALL estar disponibles solo en una sección avanzada y colapsada, con advertencia explícita.
 - Los valores guardados en DB SHALL prevalecer sobre `config/ai-kit.php` y `.env`, con indicador de origen.
 - El sistema SHALL ofrecer un "Test connection" que no exponga credenciales.
 

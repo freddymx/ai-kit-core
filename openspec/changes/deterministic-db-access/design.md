@@ -30,6 +30,7 @@ Los tres `DEVELOPMENT.md` aportan restricciones que este diseño respeta:
 | Las vistas UI se publican con `vendor:publish --tag=ai-kit-ui-views` y Composer **no las actualiza** | El markup de citas estructuradas no llega a quien ya publicó; documentar `--force`. Hasta republicar, el feature degrada limpiamente a "sin chip de DB". |
 | CSS inline con `@once`, prefijo `ck-` y `text-align:left!important` en hijos markdown | Los estilos nuevos van en el mismo bloque con prefijo `ck-`; `table/th/td` ya están en la regla existente. |
 | **Fix de tenancy ya aplicado**: `ai_kit_settings` tiene `tenant_id` (migración `000005`), `AiSettings` usa `BelongsToTenant`, `AiProviderResolver` tiene guard de escritura y `applyToConfig()` no publica sin tenant, y `AiKit::setTenant()/withTenant()` re-aplica config | Q7 queda **resuelto**: conexión y catálogo son **por tenant**, no globales. Además, mis migraciones previstas pasan a `000006`/`000007` porque `000005` ya está ocupada. |
+| **Q1 resuelto** | Named connection como principal/default; `custom` en Advanced colapsado. Ver §4.4 para el rationale completo. |
 
 **No negociables:**
 
@@ -261,12 +262,23 @@ $this->app->bind(QueryDatabase::class, fn ($app) => new QueryDatabase(
 ));
 ```
 
-### 4.4 Decisiones de conexión
+### 4.4 Decisión de conexión (Q1 — RESUELTA)
 
-- **Recomendada (default):** el administrador elige un *nombre* de conexión ya definido en `config/database.php`. No se guardan credenciales nuevas y se puede apuntar a una réplica de solo lectura.
-- **Avanzada (`custom`):** se capturan host/puerto/db/usuario/password en Filament. Útil cuando el panel administra la DB destino, pero guarda secretos en DB (cifrados) y exige `applyToConfig()` en cada request.
+**Decisión: nombre de conexión como principal y default; credenciales inline como modo `custom` avanzado y colapsado.** El `Select` de conexiones named va primero y visible; el formulario de credenciales vive en una sección *Advanced* cerrada por defecto, con un helper que advierte que prefiere una conexión named.
 
-En ambos casos se documenta el requisito de **defense in depth**: el usuario de DB debe tener `GRANT SELECT` sobre las tablas del catálogo. El resolver es la primera capa; el permiso de DB es la que realmente protege.
+**Rationale (por qué el named gana):**
+
+1. **Superficie de secretos.** `ai_kit_settings` entra en backups, exports y queries de admin. Guardar ahí la password de negocio la convierte en un secreto que viaja en cada dump. El cast `encrypted` es cifrado reversible con `APP_KEY`, **no** control de acceso: cualquier código con la fila y la key puede leerla. Con named solo se guarda un string inofensivo.
+2. **`config:cache`.** El modo `custom` exige `Config::set('database.connections...')` en runtime en cada request — justo lo que el guard `isConfigCacheCommand()` evita para el provider. Named no reescribe config en caliente.
+3. **Octane / cambio de tenant.** `config()` es process-global. Con `custom`, escribir el array de conexión del tenant A y olvidar `DB::purge()` hace que B consulte la DB de A: el mismo bug que el fix de tenancy acaba de corregir, pero con datos reales. Con named, cambiar de tenant es cambiar un nombre y `DB::connection()` resuelve lo correcto.
+4. **Deriva de opciones.** `sslmode`, `search_path`, `unix_socket`, pools... un formulario Filament siempre va detrás de lo que Laravel ya soporta en `config/database.php`.
+5. **Rotación.** En named es un deploy/env; en `custom` es panel + purge en todos los workers.
+
+**Lo que `custom` sí aporta:** administración sin deploy y credenciales por tenant en un SaaS hosted donde el admin no toca config. Por eso se conserva, pero señalizado como avanzado, no como default.
+
+**Detalles sin secretos:** la sección Connection muestra una tabla **solo lectura** con driver / host / puerto / database derivados de la conexión elegida, con badge de origen. Así se cumplen "la conexión y sus detalles" sin exponer la password.
+
+En ambos casos rige **defense in depth**: el usuario de DB debe tener `GRANT SELECT`. El resolver es la primera capa; el permiso de DB es la que protege de verdad.
 
 ---
 
@@ -278,7 +290,7 @@ Nueva `Pages\DatabaseAccessSettings` (view `ai-kit-filament::filament.pages.data
 
 Secciones Filament:
 
-1. **Connection** — `Toggle('structured_enabled')`; `Select('structured_connection')` con las claves de `config('database.connections')` + opción `custom`; campos de detalle visibles solo cuando `custom`; `TextInput('structured_password')->password()->revealable()`.
+1. **Connection** — `Toggle('structured_enabled')`; **primero** el `Select('structured_connection')` principal con las claves de `config('database.connections')` y placeholder *"Use .env default"*; debajo, tabla de detalles **solo lectura** (driver/host/puerto/database); y al final una sección **Advanced** colapsada con el toggle `custom` y sus campos (`structured_password` con `->password()->revealable()`), con helper: *"Prefer a named connection — credentials are stored encrypted in the database."*
 2. **Query policy** — `structured_max_rows` (numeric, min 1, max 500), `structured_query_timeout` (numeric), `structured_tenant_column` (text).
 3. **Connection test** — `Action::make('testConnection')` que resuelve la conexión efectiva y ejecuta `select 1`, mostrando `Notification` de éxito/error **sin imprimir credenciales**.
 4. **Effective configuration** — tabla de origen/valor igual a `AiSettingsPage::originsHtml()`.
@@ -429,7 +441,7 @@ Notas de upgrade: incluir el `--force` de vistas y la semántica de `structured.
 
 | # | Pregunta | Recomendación |
 |---|---|---|
-| Q1 | ¿Credenciales en DB o solo nombre de conexión? | **Nombre de conexión** como default; `custom` como opción avanzada. Evita secretos en la tabla de settings. |
+| Q1 | ~~¿Credenciales en DB o solo nombre de conexión?~~ | **RESUELTO: nombre de conexión como principal/default**, `custom` en sección Advanced colapsada con advertencia. Rationale completo en §4.4 (secretos, `config:cache`, Octane, deriva de opciones, rotación). |
 | Q2 | ¿Catálogo en JSON o tabla propia? | **Tabla propia** + Resource de Filament. Escala y es auditable. |
 | Q3 | ¿Soporte en modo `inject`? | **Fuera de v1**. En `inject` no hay tools; la alternativa es pre-resolver la DB en `ContextInjector`, que es otro diseño. |
 | Q4 | ¿Cómo "cruzar" un chunk con una fila de DB? | Hoy `RetrievedChunk` solo trae claves internas de ai-kit. Hace falta metadato de negocio (`order_id`, `customer_id`) en `documents`. Es prerrequisito para la complementación profunda, no para v1. |
