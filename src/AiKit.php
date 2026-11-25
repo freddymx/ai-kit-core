@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace SolutionForest\AiKit;
 
+use SolutionForest\AiKit\Support\AiProviderResolver;
+use Throwable;
+
 /**
  * Lightweight runtime context for ai-kit — currently just the active tenant.
  *
@@ -29,6 +32,7 @@ final class AiKit
     public function setTenant(?string $tenantId): self
     {
         $this->tenantId = $tenantId;
+        $this->reapplyProviderConfig();
 
         return $this;
     }
@@ -43,12 +47,31 @@ final class AiKit
     public function withTenant(?string $tenantId, callable $callback): mixed
     {
         $previous = $this->tenantId;
-        $this->tenantId = $tenantId;
+        $this->setTenant($tenantId);
 
         try {
             return $callback();
         } finally {
-            $this->tenantId = $previous;
+            // Always restore the previous tenant, including on exceptions, and
+            // re-publish its config as well.
+            $this->setTenant($previous);
+        }
+    }
+
+    /**
+     * config() is process-global: the settings of the newly active tenant must
+     * be published immediately so direct SDK/config readers see them. The
+     * resolver never calls setTenant(), so there is no recursion here.
+     */
+    private function reapplyProviderConfig(): void
+    {
+        try {
+            if (app()->bound(AiProviderResolver::class)) {
+                app(AiProviderResolver::class)->applyToConfig();
+            }
+        } catch (Throwable) {
+            // A missing settings table or an unavailable DB must never break a
+            // tenant switch (or app boot).
         }
     }
 

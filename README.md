@@ -325,7 +325,7 @@ use SolutionForest\AiKit\Facades\AiKit;
 AiKit::withTenant('acme', fn () => (new RagAgent('handbook'))->prompt('...'));
 ```
 
-Enable with `AI_KIT_TENANCY=true`.
+Enable with `AI_KIT_TENANCY=true`. AI settings follow the same rule: `ai_kit_settings` holds one row per tenant, set the tenant (`AiKit::setTenant('acme')` / `withTenant()`) before saving — without one, writes are refused and nothing is published to config.
 
 ## Contracts (swap any layer)
 

@@ -18,6 +18,8 @@ El flujo de trabajo típico es `composer require freddymx/ai-kit-core` → `php 
 
 El punto compartido es la capa de servicios: `ChatService`, `CollectionService` y `DocumentService`. Las 4 "caras" (UI, CLI, HTTP API, MCP) llaman exactamente los mismos servicios, así que el comportamiento RAG es idéntico sin importar el entrypoint. `AiKitServiceProvider` registra los bindings (contratos `Retriever`/`VectorIndex`, `Embedder`, `Chunker`, `TextExtractor`, `ConversationStore`), los comandos y las superficies opcionales.
 
+**Settings y tenancy (DB compartida con `tenant_id`):** `ai_kit_settings` tiene una fila por tenant (migración `000005`; `000004` queda intacta para instalaciones ya publicadas). `AiSettings` usa `BelongsToTenant`: el global scope filtra por `tenant()` y `creating` stampea `tenant_id`. Con `AI_KIT_TENANCY=true` y **sin tenant activo**, `AiSettings::current()` devuelve `null` — nunca filtra la fila ajena — y `AiProviderResolver::save()/reset()` lanzan `RuntimeException`. `AiKit::setTenant()` / `withTenant()` re-publican la config al entrar **y** al restaurar el tenant anterior (vía `resolver->applyToConfig()` en `try/catch`). Con tenancy desactivado sigue existiendo una única fila global.
+
 Importante: el **vendor de Composer es `freddymx`** (el namespace PHP sigue siendo `SolutionForest\AiKit\`). No hay que cambiar `use` statements ni referencias a clases en config; solo el nombre del paquete en `composer.json`. Las versiones hasta 0.2 se publicaron como `solution-forest/ai-kit-core`.
 
 ## 3. Stack y requisitos
@@ -26,7 +28,7 @@ Importante: el **vendor de Composer es `freddymx`** (el namespace PHP sigue sien
 - **`laravel/ai: ^1.4`** (lock actual: `v1.4.1`) — agentes, providers, embeddings, conversaciones y tool calling.
 - **`laravel/prompts: ^0.3.6`** (installer y comandos interactivos); **`smalot/pdfparser: ^2.7`** (extracción PDF).
 - **Dev:** `pestphp/pest: ^5.0`, `orchestra/testbench: ^10.0|^11.0`, `laravel/mcp: ^1.0` (también en `suggest`, requerido solo si `features.mcp` está activo), `laravel/pao: ^1.1` (sin uso en código).
-- **DB:** 4 migraciones propias con tablas `ai_kit_collections`, `ai_kit_documents`, `ai_kit_chunks`, `ai_kit_settings`; las conversaciones usan las tablas del SDK (`agent_conversations`, `agent_conversation_messages`).
+- **DB:** 5 migraciones propias (4 de creación + `000005` que agrega `tenant_id` a `ai_kit_settings`); tablas `ai_kit_collections`, `ai_kit_documents`, `ai_kit_chunks`, `ai_kit_settings`; las conversaciones usan las tablas del SDK (`agent_conversations`, `agent_conversation_messages`).
 - Tests offline: sin API keys — LLM con fakes del SDK y embeddings con un double determinístico (`tests/Support/FakeEmbedder.php`).
 
 ## 4. Estado actual
@@ -83,7 +85,7 @@ Clases clave y su rol:
 | `RagAgent` | Agente RAG; resuelve provider/modelo vía resolver, inyecta tool o contexto según `mode`, stream y citations. |
 | `AiSdkEmbedder` | Genera embeddings through el SDK; guarda el nombre del modelo en cada chunk. |
 | `AiProviderResolver` | Source of truth de provider/modelo; DB → config → `.env`, expande el sentinel `local`. |
-| `AiSettings` | Modelo de la fila única y global de settings (sin `tenant_id`), con `current()` y `reset()`. |
+| `AiSettings` | Modelo de settings con `BelongsToTenant`: una fila por tenant si tenancy está activo, global si no; `current()` con guard sin tenant. |
 | `ConsistentConversationStore` | Store del SDK que mantiene tool calls y outputs pareados para no romper conversaciones truncadas. |
 | `IngestionService` | `createFromPath`/`createFromUrl`; extract → chunk → embed, sync o vía queue. |
 | `ChatService` | `ask()` / stream; punto de entrada compartido por UI, CLI, API y MCP. |
@@ -120,7 +122,9 @@ Setear `AI_KIT_CHAT_PROVIDER` y/o `AI_KIT_EMBED_PROVIDER` en el sentinel `local`
 | `AI_KIT_LOCAL_EMBED_MODEL` | `nomic-embed-text` | Modelo de embeddings |
 | `AI_KIT_LOCAL_EMBED_DIMENSIONS` | `768` | Dimensiones del vector (sincronizar con las migraciones) |
 
-**Precedencia:** los valores guardados en `ai_kit_settings` (página Filament) ganan siempre a `config/ai-kit.php` y `.env`. En cada request, `AiProviderResolver::applyToConfig()` copia los valores efectivos a `config('ai-kit.chat.*')`, `config('ai-kit.embeddings.*')` y `config('ai.providers.local')`, de modo que el código que llama al SDK directamente (`Ai::text()`, `Ai::embeddings()`) ve lo mismo. `AiProviderResolver::reset()` borra la fila y vuelve a `.env`. `effective()` enmascara la key para UIs/logs; la key real se escribe en `ai.providers.local.key` porque el SDK la necesita.
+**Precedencia:** los valores guardados en `ai_kit_settings` (página Filament) ganan siempre a `config/ai-kit.php` y `.env`. En cada request, `AiProviderResolver::applyToConfig()` copia los valores efectivos a `config('ai-kit.chat.*')`, `config('ai-kit.embeddings.*')` y `config('ai.providers.local')`, de modo que el código que llama al SDK directamente (`Ai::text()`, `Ai::embeddings()`) ve lo mismo. `AiProviderResolver::reset()` borra la fila del tenant activo y vuelve a `.env`. `effective()` enmascara la key para UIs/logs; la key real se escribe en `ai.providers.local.key` porque el SDK la necesita.
+
+Con tenancy activo, `applyToConfig()` **no publica nada** mientras no haya tenant: publicar en `boot()` (antes de resolver al tenant) dejaría los valores de un tenant en la config global. El resolver mantiene `envDefaults` como baseline global capturado una sola vez por clave — NUNCA se sobrescribe con un valor publicado — y `publishedConfig` por tenant (`tenant_id ?? '__global__'`) para detectar qué valor en `config()` es propio. Los cambios escritos por otro código se registran como baseline del tenant (`tenantBaselines`), sin envenenar el baseline global.
 
 ## 7. Flujo de desarrollo local
 
@@ -160,6 +164,10 @@ Los repos hermanos viven al mismo nivel: `../ai-kit-ui-livewire` y `../ai-kit-fi
 - **Resolución lazy:** los getters de `AiProviderResolver` son lazy y toleran que la tabla `ai_kit_settings` todavía no exista (los bindings del contenedor son singletons). `applyToConfig()` sí corre en `boot()`, pero dentro de `try/catch`: una DB caída o migraciones sin correr nunca impiden el boot de la app.
 - **Centinela `local` registrado como `ai.providers.local`:** para que las llamadas directas al SDK resuelvan el provider, se publica bajo la clave `local` (no `ai_kit_local`): `AiManager::build()` rechaza nombres ya tomados. Internamente el provider on-demand conserva el nombre `ai_kit_local`.
 - **`config:cache` excluido del apply:** `isConfigCacheCommand()` detecta `config:cache` en argv y salta el paso DB → config, porque cachear valores de DB los dejaría stale hasta el próximo rebuild.
+- **Guard de tenant en settings:** con `AI_KIT_TENANCY=true` y sin `AiKit::setTenant()`, `current()` es `null`, `applyToConfig()` no escribe y `save()/reset()` tiran `RuntimeException`. Es deliberado: una query sin scope devolvería la fila de otro tenant y un `query()->delete()` borraría todas las filas. El panel Filament convierte esa excepción en `Notification::warning()`.
+- **Re-apply en cada cambio de tenant:** `setTenant()` y el `finally` de `withTenant()` llaman al resolver dentro de `try/catch`. El resolver no llama a `setTenant()`, así que no hay recursión; una DB caída nunca rompe el switch.
+- **Octane / workers:** `config()` es **process-global** y sobrevive entre requests. En un worker con tenants distintos hay que re-aplicar por request (llamando `AiKit::setTenant($id)` / `withTenant()`, que ya re-publican, o `resolver->reapply()`) o usar el resolver directamente en vez de leer `config('ai-kit.*')`. Si se limpia el tenant con `setTenant(null)`, `applyToConfig()` publica los valores derivados de `.env` (incluido `ai.providers.local` con `AI_KIT_LOCAL_*`) para que no quede ningún valor del tenant anterior en la config global.
+- **Baseline nunca envenenado:** `envDefaults[key]` se captura una vez y jamás se sobreescribe con un valor publicado; por eso un `reset()` dentro de acme vuelve exactamente al valor de `.env`, incluso después de pasar por globex.
 - **Error si falta URL:** `buildLocalProvider()` tira `RuntimeException` indicando configurar `AI_KIT_LOCAL_URL` o el campo "Local URL" de Filament; no hay default silencioso para el provider on-demand.
 - **Reindexado detectable por embedding model:** cada chunk guarda `embedding_model`; cambiar `AI_KIT_EMBED_MODEL` no invalida lo ya indexado silenciosamente. `ai-kit:document reindex {id}` permite re-embedder de forma explícita.
 - **SDK 1.x:** las conversaciones se scoping por `participant_type` / `participant_id` (ya no `user_id`), y `ConsistentConversationStore` se basa en la columna `steps` del SDK. Un tool call sin respuesta no se persiste; el SDK repara el historial en el siguiente run.
@@ -169,7 +177,7 @@ Los repos hermanos viven al mismo nivel: `../ai-kit-ui-livewire` y `../ai-kit-fi
 
 Checklist antes de publicar:
 
-1. `vendor/bin/pest` en el paquete (y en los hermanos si el cambio es transversal) — 92 passed / 319 assertions en el estado actual.
+1. `vendor/bin/pest` en el paquete (y en los hermanos si el cambio es transversal) — 97 passed / 355 assertions en el estado actual.
 2. `composer validate` (sin errores).
 3. Revisar que `features.api` / `features.mcp` siguen funcionando con los flags en `false` y `true`.
 4. Tag semver en 0.x: **patch** para fixes (`0.4.3 → 0.4.4`), **minor** para features (`0.4.3 → 0.5.0`); recordar actualizar `branch-alias` y las constraints `^0.4` de los hermanos cuando corresponda.

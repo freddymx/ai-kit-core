@@ -5,17 +5,21 @@ declare(strict_types=1);
 namespace SolutionForest\AiKit\Support;
 
 use Illuminate\Support\Facades\Schema;
+use SolutionForest\AiKit\AiKit;
 use SolutionForest\AiKit\Models\AiKitModel;
+use SolutionForest\AiKit\Models\Concerns\BelongsToTenant;
 use Throwable;
 
 /**
- * The single row of provider overrides edited from the Filament settings page.
+ * The provider overrides edited from the Filament settings page: one row per
+ * tenant when tenancy is enabled, a single global row otherwise.
  *
  * Every column is nullable: null means "fall back to config/ai-kit.php (.env)".
  * current() stays quiet when the table has not been migrated yet, so upgrading
  * an app cannot break boot or a plain `new RagAgent()` before `migrate`.
  *
  * @property int $id
+ * @property string|null $tenant_id
  * @property string|null $chat_provider
  * @property string|null $chat_model
  * @property string|null $embeddings_provider
@@ -30,6 +34,8 @@ use Throwable;
  */
 class AiSettings extends AiKitModel
 {
+    use BelongsToTenant;
+
     protected string $baseTable = 'settings';
 
     protected $guarded = ['id'];
@@ -41,12 +47,23 @@ class AiSettings extends AiKitModel
     ];
 
     /**
-     * The first (and, by convention, only) settings row, or null when there is
-     * none — including when the table does not exist yet.
+     * The settings row for the active tenant, or null when there is none —
+     * including when the table does not exist yet.
+     *
+     * With tenancy enabled but no tenant set we must NOT query: the global
+     * scope is a no-op in that case and `first()` would return another tenant's
+     * row. With an active tenant the global scope already filters, so a plain
+     * query is correct.
      */
     public static function current(): ?self
     {
         if (! self::tableExists()) {
+            return null;
+        }
+
+        $context = app(AiKit::class);
+
+        if ($context->tenancyEnabled() && ! $context->hasTenant()) {
             return null;
         }
 
