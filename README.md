@@ -7,6 +7,8 @@
 
 **The engine of the ai-kit suite** — document ingestion, chunking, extraction, vector retrieval, and RAG agents for Laravel, built on the official [Laravel AI SDK](https://laravel.com/docs/ai).
 
+> Guía de desarrollo (objetivos, stack, estructura, estado y relación con la suite): [DEVELOPMENT.md](DEVELOPMENT.md)
+
 `composer require` → `php artisan ai-kit:install` → a grounded, cited RAG assistant over your own documents — with **no external vector database required**.
 
 - **Two vector drivers** behind one contract: **SQLite** (zero-infra, default) and **pgvector** (production).
