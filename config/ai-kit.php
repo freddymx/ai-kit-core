@@ -246,6 +246,7 @@ return [
     'ui' => [
         'citations' => (bool) env('AI_KIT_UI_CITATIONS', true),
         'history' => (bool) env('AI_KIT_UI_HISTORY', false),
+        'collection_selector' => (bool) env('AI_KIT_UI_COLLECTION_SELECTOR', false),
         'stream_middleware' => ['web'],
     ],
 
